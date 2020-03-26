@@ -7,8 +7,8 @@ from PIL import Image, ImageTk
 
 
 class GUI:
-    """Main class of the app that displays the main GUI and starts all other screens and modals
-    """
+    """Main class of the app that displays the main GUI and starts all other screens and modals"""
+
     def __init__(self):
         """Initialize the class and prompt for opening an nd2 file
         """
@@ -22,8 +22,8 @@ class GUI:
         self.open_nd2()
 
     def destroy_all(self):
-        """Clear all frames and widgets
-        """
+        """Clear all frames and widgets"""
+
         for k in self.widgets:
             self.widgets[k].destroy()
         self.widgets = {}
@@ -32,8 +32,8 @@ class GUI:
         self.window.pack(side="top", fill="both", expand=True)
 
     def open_nd2(self):
-        """Opens the filepicker for an nd2 file and proceeds to the next step
-        """
+        """Opens the filepicker for an nd2 file and proceeds to the next step"""
+
         filename = filedialog.askopenfilename(initialdir=".", title="Select file...",
                                               filetypes=(("nd2 files", "*.nd2"), ("All files", "*.*")))
         if filename:
@@ -42,8 +42,8 @@ class GUI:
             self.process_nd2()
 
     def process_nd2(self):
-        """Loads the nd2 file into the class and obtains and displays the metadata from the file
-        """
+        """Loads the nd2 file into the class and obtains and displays the metadata from the file"""
+
         self.stack = ND2Stack(self.filename)
         tvMeta = ttk.Treeview(self.window)
         tvMeta['columns'] = ("metaval")
@@ -60,9 +60,9 @@ class GUI:
         self.widgets['btnNext'].grid(row=4, sticky=tk.E)
 
     def open_seriesselector(self):
-        """Lets the user pick which series to analyse by showing the middle frame of each series
-        @todo: make the frame scrollable to be able to view many series
-        """
+        """Lets the user pick which series to analyse by showing the middle frame of each series"""
+
+        # @todo: make the frame scrollable to be able to view many series
         self.destroy_all()
         images = []
         imgdisplays = []
@@ -88,6 +88,9 @@ class GUI:
         
         Keyword Arguments:
             variables {list} -- List of tk.IntVars() that define which series were picked (default: {None})
+
+        :param variables:  (Default value = None)
+
         """
         if variables is None:
             variables = []
@@ -99,20 +102,17 @@ class GUI:
         self.launch_GUV_GUI()
 
     def launch_GUV_GUI(self):
-        """Open the GUV_GUI for every of the chosen series
-        """
+        """Open the GUV_GUI for every of the chosen series"""
         for i in self.selected_series:
             print(f"Analysing series {i}")
             GUV_GUI(self.stack, i)
 
     def mainloop(self):
-        """Main loop to display the program
-        """
+        """Main loop to display the program"""
         self.window.mainloop()
 
 
 def run():
-    """This function is called on executing the python module, it starts the GUI and enters the main loop
-    """
+    """This function is called on executing the python module, it starts the GUI and enters the main loop"""
     gui = GUI()
     gui.mainloop()

@@ -3,6 +3,8 @@ from math import ceil
 
 
 class ND2Stack:
+    """Helper class for handling nd2 files"""
+
     def __init__(self, filename):
         """Initialize new nd2stack
         
@@ -19,8 +21,7 @@ class ND2Stack:
         self.series_length = self.num_zslices
 
     def print_info(self):
-        """Prints a quick summary of the file
-        """
+        """Prints a quick summary of the file"""
         print(
             "Loaded nd2 file %s.\nFile contains %d series of images.\nThe following channels are present: %s.\nEach "
             "series has %d z-slices of %dx%d pixels" %
@@ -32,9 +33,10 @@ class ND2Stack:
         
         Keyword Arguments:
             print_output {bool} -- Whether or not to print the output (default: {False})
-        
-        Returns:
-            list -- List of (key,value) pairs of the metadata
+
+        :param print_output:  (Default value = False)
+        :returns: list -- List of (key,value) pairs of the metadata
+
         """
         if not print_output:
             return self.stack.metadata.items()
@@ -43,15 +45,11 @@ class ND2Stack:
 
     def get_series(self, series_idx):
         """Returns a sliced stack for only the certain series
-        
-        Arguments:
-            series_idx {int} -- index of the series
-        
-        Raises:
-            Exception: Thrown when the index is larger than the number of series
-        
-        Returns:
-            ND2Reader -- sliced stack for selected series
+
+        :param series_idx: int
+        :param Raises: 
+        :returns: ND2Reader -- sliced stack for selected series
+
         """
         if series_idx > self.num_series:
             raise Exception("No series with index %d exists" % series_idx)
@@ -59,15 +57,12 @@ class ND2Stack:
 
     def get_series_midframe(self, series_idx, channel_idx=1):
         """Get the frame at half z-height for given series and channel
-        
-        Arguments:
-            series_idx {int} -- index of the series
-        
-        Keyword Arguments:
-            channel_idx {int} -- index of the channel (default: {1})
-        
-        Returns:
-            ND2Reader -- sliced stack for selected series
+
+        :param series_idx: int
+        :param Keyword: Arguments
+        :param channel_idx: int (Default value = 1)
+        :returns: ND2Reader -- sliced stack for selected series
+
         """
         series = self.get_series(series_idx)
         midframe_idx = ceil(self.num_zslices / 2.)
