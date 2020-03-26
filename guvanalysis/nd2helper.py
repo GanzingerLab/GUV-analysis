@@ -1,6 +1,8 @@
 from nd2reader import ND2Reader
+from math import ceil
 
-class nd2stack:
+
+class ND2Stack:
     def __init__(self, filename):
         """Initialize new nd2stack
         
@@ -19,12 +21,23 @@ class nd2stack:
     def print_info(self):
         """Prints a quick summary of the file
         """
-        print("Loaded nd2 file %s.\nFile contains %d series of images.\nThe following channels are present: %s.\nEach serie has %d z-slices of %dx%d pixels" %
-              (self.filename, self.num_series, ", ".join(self.stack.metadata['channels']), self.num_zslices, self.stack.sizes['x'], self.stack.sizes['y']))
+        print(
+            "Loaded nd2 file %s.\nFile contains %d series of images.\nThe following channels are present: %s.\nEach "
+            "series has %d z-slices of %dx%d pixels" %
+            (self.filename, self.num_series, ", ".join(self.stack.metadata['channels']), self.num_zslices,
+             self.stack.sizes['x'], self.stack.sizes['y']))
 
-    def print_metadata(self):
-        """Prints the metadata of the file
+    def get_metadata(self, print_output=False):
+        """Returns or prints the metadata of the file
+        
+        Keyword Arguments:
+            print_output {bool} -- Whether or not to print the output (default: {False})
+        
+        Returns:
+            list -- List of (key,value) pairs of the metadata
         """
+        if not print_output:
+            return self.stack.metadata.items()
         for k, v in self.stack.metadata.items():
             print(k, v)
 
@@ -42,7 +55,23 @@ class nd2stack:
         """
         if series_idx > self.num_series:
             raise Exception("No series with index %d exists" % series_idx)
-        return self.stack[series_idx*self.series_length:(series_idx+1)*self.series_length]
+        return self.stack[series_idx * self.series_length:(series_idx + 1) * self.series_length]
+
+    def get_series_midframe(self, series_idx, channel_idx=1):
+        """Get the frame at half z-height for given series and channel
+        
+        Arguments:
+            series_idx {int} -- index of the series
+        
+        Keyword Arguments:
+            channel_idx {int} -- index of the channel (default: {1})
+        
+        Returns:
+            ND2Reader -- sliced stack for selected series
+        """
+        series = self.get_series(series_idx)
+        midframe_idx = ceil(self.num_zslices / 2.)
+        return series[midframe_idx][channel_idx]
 
     def __del__(self):
         """Close the file when the class is deleted
