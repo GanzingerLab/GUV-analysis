@@ -62,42 +62,38 @@ class GUI:
     def open_seriesselector(self):
         """Lets the user pick which series to analyse by showing the middle frame of each series"""
 
-        # @todo: make the frame scrollable to be able to view many series
         self.destroy_all()
-        images = []
-        imgdisplays = []
-        imglabels = []
-        imgcheckvars = []
+
+        self.widgets['tvSeries'] = ttk.Treeview(self.window)
+        self.widgets['tvSeries']['columns'] = ("metaval")
+        self.widgets['tvSeries'].column("#0", width=250)
+        self.widgets['tvSeries'].column("metaval", minwidth=250)
+        self.widgets['tvSeries'].heading("#0", text="Image", anchor=tk.W)
+        self.widgets['tvSeries'].heading("metaval", text="Series", anchor=tk.W)
+        self.widgets['tvSeries'].pack(side="left", fill="both")
+        style = ttk.Style(self.window)
+        style.configure('Treeview', rowheight=80) # set height a bit larger than the image to allow spacing
+
+        self.widgets['scrollSeries'] = ttk.Scrollbar(self.window, orient="vertical", command=self.widgets['tvSeries'].yview)
+        self.widgets['scrollSeries'].pack(side="left", fill="y")
+        self.widgets['tvSeries'].configure(yscrollcommand=self.widgets['scrollSeries'].set)
+
+        self.images = [] # for some reason display images only works for members of the class, hence the `self.`
         for i in range(self.stack.num_series):
-            images.append(ImageTk.PhotoImage(
-                Image.fromarray(self.stack.get_series_midframe(i, -1)).convert("RGB").resize((50, 50))))
-            imgdisplays.append(tk.Label(self.window, image=images[i]))
-            imgdisplays[i].image = images[i]
-            imgdisplays[i].grid(row=i, column=1, padx=5, pady=5, sticky=tk.W)
-            imgcheckvars.append(tk.IntVar())
-            imglabels.append(
-                tk.Checkbutton(self.window, text=f"series {i}", onvalue=1, offvalue=0, variable=imgcheckvars[i]))
-            imglabels[i].grid(row=i, column=2, sticky=tk.W)
-        self.widgets['btnNext'] = tk.Button(self.window, text='Next >',
-                                            command=lambda: self.extract_seriesindices(imgcheckvars))
-        self.widgets['btnNext'].grid(sticky=tk.SE)
-        return
-
-    def extract_seriesindices(self, variables=None):
-        """Obtain which series the user has picked
+            self.images.append(ImageTk.PhotoImage(
+                Image.fromarray(self.stack.get_series_midframe(i, -1)).convert("RGB").resize((75, 75))))
+            self.widgets['tvSeries'].insert('', 'end', iid=i, image=self.images[i], values=[f"Series {i}"])
         
-        Keyword Arguments:
-            variables {list} -- List of tk.IntVars() that define which series were picked (default: {None})
+        self.widgets['lblHelp'] = tk.Label(self.window, text='Select multiple by holding the Ctrl key')
+        self.widgets['lblHelp'].pack(side='left')
+        self.widgets['btnNext'] = tk.Button(self.window, text='Next >',
+                                            command=self.extract_seriesindices)
+        self.widgets['btnNext'].pack(side='bottom')
 
-        :param variables:  (Default value = None)
+    def extract_seriesindices(self):
+        """Obtain which series the user has picked"""
 
-        """
-        if variables is None:
-            variables = []
-        self.selected_series = []
-        for i, value in enumerate(variables):
-            if value.get() == 1:
-                self.selected_series.append(i)
+        self.selected_series = [int(i) for i in self.widgets['tvSeries'].selection()]
         self.destroy_all()
         self.launch_GUV_GUI()
 
