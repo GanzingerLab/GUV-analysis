@@ -1,7 +1,7 @@
 from .nd2helper import ND2Stack
 import tkinter as tk
 import tkinter.ttk as ttk
-
+import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -9,6 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.patches
 from matplotlib.backend_bases import MouseEvent,MouseButton
+from scipy.spatial import KDTree
 
 class GUV_GUI:
     CHANNEL = -1 # channel to use for picking GUVs
@@ -24,7 +25,7 @@ class GUV_GUI:
         self.stack = stack
         self.series_idx = series_idx
         self.series = stack.get_series(series_idx)
-        self.guv_points = {i: [] for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1],[x2,y2]]
+        self.guv_points = {i: np.empty((0,2)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1],[x2,y2]]
         # self.open_channelscroller()
         self.open_GUV_selector()
 
@@ -72,6 +73,8 @@ class GUV_GUI:
         self.root.title("GUV selector")
         lbl = tk.Label(self.root, text='Select all GUVs')
         lbl.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        lbl2 = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select a GUV and the right mouse button to remove a selected point")
+        lbl2.pack(side=tk.TOP, fill=tk.BOTH)
         self.window = tk.Frame(self.root)
         self.window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
@@ -89,7 +92,7 @@ class GUV_GUI:
     def remove_all_points(self):
         """Remove all artists (selected points) from the plot
         """
-        for a in self.ax.artists:
+        for a in reversed(self.ax.artists): # for some reason it only properly removes all points when reversed
             a.remove()
     
     def draw_points_on_frame(self):
@@ -101,19 +104,39 @@ class GUV_GUI:
             self.ax.add_artist(matplotlib.patches.Ellipse(xy=point,width=10.,height=10.,facecolor='r'))
         self.canvas.draw()
 
+    def find_closest_point_in_current_frame(self, point):
+        """Find the point closest to a given coordinate
+
+        Selects the index from self.guv_points that lies closest to
+        the given coordinate
+        
+        Args:
+            point ((x,y)): position to compare the guv_points to
+        
+        Returns:
+            int: index of the closest point (-1 if no points were found)
+        """
+        points = self.guv_points[self.current_frame]
+        if len(points) == 0:
+            return -1
+        tree = KDTree(points)
+        return tree.query(point)[1] # index of closest point
+
     def _onclick_guvselector(self, event):
         """Handler for clicking the plot
 
-        Adds artists to the current frame
+        Adds artists to the current frame and removes them on right click
         
         Args:
             event (matplotlib.backend_bases.MouseEvent): Click event
         """
-        print('click')
         if event.button == MouseButton.LEFT:
-            print('click left')
-            self.guv_points[self.current_frame].append([event.xdata, event.ydata])
-            self.draw_points_on_frame()        
+            self.guv_points[self.current_frame] = np.append(self.guv_points[self.current_frame], [[event.xdata, event.ydata]], axis=0)
+        if event.button == MouseButton.RIGHT: # remove closest point
+            idx_to_remove = self.find_closest_point_in_current_frame(np.array([event.xdata,event.ydata]))
+            if idx_to_remove >= 0:
+                self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
+        self.draw_points_on_frame()
 
     def _onscroll_guvselector(self, event):
         """Handler for scrolling
@@ -123,7 +146,6 @@ class GUV_GUI:
         Args:
             event (matplotlib.backend_bases.MouseEvent): Scroll event
         """
-        print('scroll')
         if event.button == 'up':
             self.current_frame = (self.current_frame +
                                   1) % self.stack.series_length
@@ -131,7 +153,6 @@ class GUV_GUI:
             self.current_frame = (self.current_frame -
                                   1) % self.stack.series_length
         
-        self.remove_all_points()
         self.imax.set_data(self.series[self.current_frame][self.CHANNEL])
         self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
         self.draw_points_on_frame()
