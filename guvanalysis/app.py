@@ -92,7 +92,9 @@ class GUI:
 
     def extract_seriesindices(self):
         """Obtain which series the user has picked"""
-
+        if len(self.widgets['tvSeries'].selection()) == 0:
+            print("Select at least one series")
+            return
         self.selected_series = [int(i) for i in self.widgets['tvSeries'].selection()]
         self.destroy_all()
         self.launch_GUV_GUI()
