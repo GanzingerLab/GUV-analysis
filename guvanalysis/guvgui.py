@@ -10,12 +10,14 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.patches
 from matplotlib.backend_bases import MouseEvent,MouseButton
 from scipy.spatial import KDTree
+import pickle
+import os
 
 class GUV_GUI:
-    CHANNEL = -1 # channel to use for picking GUVs
+    CHANNEL = 1 # channel to use for picking GUVs
     """Graphical User Interface for selecting GUVs from the microscopy data"""
 
-    def __init__(self, stack: ND2Stack = None, series_idx=0):
+    def __init__(self, stack: ND2Stack = None, series_idx=0, parameters = {}):
         """Initialize the GUI
         
         Keyword Arguments:
@@ -24,10 +26,19 @@ class GUV_GUI:
         """
         self.stack = stack
         self.series_idx = series_idx
+        self.parameters = parameters
+        print(self.parameters['directory'])
         self.series = stack.get_series(series_idx)
         self.guv_points = {i: np.empty((0,2)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1],[x2,y2]]
         # self.open_channelscroller()
         self.open_GUV_selector()
+        guv_points_array = np.array(list(self.guv_points.values()))
+        outputdata = {
+            'points': guv_points_array, # array with points for all frames
+            'guv_frames': [i for i in range(guv_points_array.shape[0]) if guv_points_array[i].shape[0] > 0], # indices for frames that aren't empty
+            }
+        with open(os.path.join(self.parameters['directory'],"guv_points_series-%02d.dat" % self.series_idx),"wb") as outfile:
+            pickle.dump(outputdata, outfile)
 
     def open_channelscroller(self):
         """Display matplotlib figure of all channels next to each other through which the user can scroll"""
@@ -75,11 +86,15 @@ class GUV_GUI:
         lbl.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         lbl2 = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select a GUV and the right mouse button to remove a selected point")
         lbl2.pack(side=tk.TOP, fill=tk.BOTH)
+        btn = tk.Button(self.root, text='Done', command=self.quit)
+        btn.pack(side=tk.TOP, fill=tk.BOTH)
         self.window = tk.Frame(self.root)
         self.window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.statusbar = tk.Label(self.root, text='', bd=1, relief=tk.SUNKEN, anchor=tk.W)
+        self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.current_frame = 0
-        self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=150)
+        self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=100)
         self.imax = self.ax.imshow(self.series[self.current_frame][self.CHANNEL])
         self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
 
@@ -87,6 +102,8 @@ class GUV_GUI:
         self.canvas.get_tk_widget().grid(row=0, column=0)
         self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector)
         self.canvas.mpl_connect('button_press_event', self._onclick_guvselector)
+        self.statusbar['text'] = 'Select GUVs'
+        
         self.root.mainloop()
 
     def remove_all_points(self):
@@ -130,12 +147,15 @@ class GUV_GUI:
         Args:
             event (matplotlib.backend_bases.MouseEvent): Click event
         """
+        coord = (event.xdata, event.ydata)
         if event.button == MouseButton.LEFT:
-            self.guv_points[self.current_frame] = np.append(self.guv_points[self.current_frame], [[event.xdata, event.ydata]], axis=0)
+            self.guv_points[self.current_frame] = np.append(self.guv_points[self.current_frame], np.array([coord]), axis=0)
+            self.statusbar['text'] = f'Point in frame {self.current_frame} has been added'
         if event.button == MouseButton.RIGHT: # remove closest point
-            idx_to_remove = self.find_closest_point_in_current_frame(np.array([event.xdata,event.ydata]))
+            idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
             if idx_to_remove >= 0:
                 self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
+                self.statusbar['text'] = 'Point has been removed'
         self.draw_points_on_frame()
 
     def _onscroll_guvselector(self, event):
@@ -158,7 +178,7 @@ class GUV_GUI:
         self.draw_points_on_frame()
         self.canvas.draw()
     
-    def __del__(self):
+    def quit(self):
         """Destructor for the class
         """
         self.root.quit()

@@ -4,6 +4,7 @@ from tkinter import ttk
 from .nd2helper import ND2Stack
 from .guvgui import GUV_GUI
 from PIL import Image, ImageTk
+import os
 
 
 class GUI:
@@ -19,6 +20,7 @@ class GUI:
         self.window.pack(side="top", fill="both", expand=True)
         self.widgets = {'lblHelp': tk.Label(self.window, text="Select a file to open")}
         self.widgets['lblHelp'].grid(row=1, columnspan=3, sticky=tk.EW)
+        self.parameters = {}
         self.open_nd2()
 
     def destroy_all(self):
@@ -37,14 +39,15 @@ class GUI:
         filename = filedialog.askopenfilename(initialdir=".", title="Select file...",
                                               filetypes=(("nd2 files", "*.nd2"), ("All files", "*.*")))
         if filename:
-            self.filename = filename
+            self.parameters['filename'] = filename
+            self.parameters['directory'] = os.path.dirname(filename)
             self.widgets['lblHelp']['text'] = f"You selected {filename}"
             self.process_nd2()
 
     def process_nd2(self):
         """Loads the nd2 file into the class and obtains and displays the metadata from the file"""
 
-        self.stack = ND2Stack(self.filename)
+        self.stack = ND2Stack(self.parameters['filename'])
         tvMeta = ttk.Treeview(self.window)
         tvMeta['columns'] = ("metaval")
         tvMeta.column("#0", width=250)
@@ -95,19 +98,25 @@ class GUI:
         if len(self.widgets['tvSeries'].selection()) == 0:
             print("Select at least one series")
             return
-        self.selected_series = [int(i) for i in self.widgets['tvSeries'].selection()]
+        self.parameters['selected_series'] = [int(i) for i in self.widgets['tvSeries'].selection()]
         self.destroy_all()
         self.launch_GUV_GUI()
 
     def launch_GUV_GUI(self):
         """Open the GUV_GUI for every of the chosen series"""
-        for i in self.selected_series:
+        for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
-            GUV_GUI(self.stack, i)
+            GUV_GUI(self.stack, i, self.parameters)
+        self.quit()
 
     def mainloop(self):
         """Main loop to display the program"""
         self.window.mainloop()
+    
+    def quit(self):
+        """Exits the program"""
+        self.root.quit()
+        self.root.destroy()
 
 
 def run():
