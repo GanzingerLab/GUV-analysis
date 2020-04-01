@@ -28,7 +28,6 @@ class GUV_GUI:
         self.stack = stack
         self.series_idx = series_idx
         self.parameters = parameters
-        print(self.parameters['directory'])
         self.series = stack.get_series(series_idx)
         self.guv_points = {i: np.empty((0,3)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1,r1],[x2,y2,r1]]
         self.mouseevent = {
@@ -39,18 +38,9 @@ class GUV_GUI:
             }
         self.open_GUV_selector()
 
-        guv_points_array = np.array(list(self.guv_points.values()))
-        guvs_per_frame = [guv_points_array[i].shape[0] for i in range(guv_points_array.shape[0])] 
-        nonempty_frames = [i for i in range(guv_points_array.shape[0]) if guvs_per_frame[i] > 0] 
-
-        outputdata = {
-            'points': guv_points_array, # array with points for all frames
-            'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
-            'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
-            }
         # store data in .dat file in same folder as .nd2 file
         with open(os.path.join(self.parameters['directory'],"guv_points_series-%02d.dat" % self.series_idx),"wb") as outfile:
-            pickle.dump(outputdata, outfile)
+            pickle.dump(self.outputdata, outfile)
 
     def open_channelscroller(self):
         """Display matplotlib figure of all channels next to each other through which the user can scroll"""
@@ -96,12 +86,12 @@ class GUV_GUI:
         """
         self.root = tk.Tk()
         self.root.title("GUV selector")
-        lbl = tk.Label(self.root, text='Select all GUVs')
-        lbl.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        lbl2 = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select the centre of a GUV, click again to determine the radius\nand the right mouse button to remove a selected point")
-        lbl2.pack(side=tk.TOP, fill=tk.BOTH)
-        btn = tk.Button(self.root, text='Done', command=self.quit)
-        btn.pack(side=tk.TOP, fill=tk.BOTH)
+        self.GUIelements = {'lblTitle': tk.Label(self.root, text='Select all GUVs')}
+        self.GUIelements['lblTitle'].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.GUIelements['lblHelp'] = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select the centre of a GUV, click again to determine the radius\nand the right mouse button to remove a selected point")
+        self.GUIelements['lblHelp'].pack(side=tk.TOP, fill=tk.BOTH)
+        self.GUIelements['btn'] = tk.Button(self.root, text='Continue to background selection >', command=self.open_BG_selector)
+        self.GUIelements['btn'].pack(side=tk.TOP, fill=tk.BOTH)
         self.window = tk.Frame(self.root)
         self.window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.statusbar = tk.Label(self.root, text='', bd=1, relief=tk.SUNKEN, anchor=tk.W)
@@ -114,9 +104,9 @@ class GUV_GUI:
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.window)
         self.canvas.get_tk_widget().grid(row=0, column=0)
-        self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
-        self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to add/remove points 
-        self.canvas.mpl_connect('motion_notify_event', self._onmove_guvselector) # move to update the current selection of points
+        self.scrollhandler = self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
+        self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to add/remove points 
+        self.movehandler = self.canvas.mpl_connect('motion_notify_event', self._onmove_guvselector) # move to update the current selection of points
         self.statusbar['text'] = 'Select GUVs...'
         
         self.root.mainloop()
@@ -184,10 +174,15 @@ class GUV_GUI:
             self.statusbar['text'] = f'Point has been added to frame {self.current_frame}'
         
         if event.button == MouseButton.RIGHT: # remove closest point
-            idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
-            if idx_to_remove >= 0: 
-                self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
-                self.statusbar['text'] = 'Point has been removed'
+            if self.mouseevent['press']:
+                self.mouseevent['press'] = False
+                [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
+                self.mouseevent['artist'] = None
+            else:
+                idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
+                if idx_to_remove >= 0: 
+                    self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
+                    self.statusbar['text'] = 'Point has been removed'
         
         self.draw_points_on_frame()
 
@@ -225,9 +220,100 @@ class GUV_GUI:
         self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
         self.draw_points_on_frame()
         self.canvas.draw()
+
+    def open_BG_selector(self):
+        """GUI for selecting the background box
+
+        Removes all listeners first, then selects the frame to show (with most GUVs)
+        and then initiates the GUI for selecting the background box
+        """
+        guv_points_array = np.array(list(self.guv_points.values()))
+        guvs_per_frame = [guv_points_array[i].shape[0] for i in range(guv_points_array.shape[0])] 
+        nonempty_frames = [i for i in range(guv_points_array.shape[0]) if guvs_per_frame[i] > 0] 
+
+        if len(nonempty_frames) == 0:
+            self.statusbar['text'] = 'First select at least 1 GUV to continue...'
+            return
+        
+        self.outputdata = {
+            'points': guv_points_array, # array with points for all frames
+            'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
+            'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
+            'background_box': None, # to be set later
+            } # store also for later saving to file
+        
+        self.canvas.mpl_disconnect(self.scrollhandler)
+        self.canvas.mpl_disconnect(self.presshandler)
+        self.canvas.mpl_disconnect(self.movehandler)
+
+        self.current_frame = np.argmax(guvs_per_frame) # index of frame with highest number of GUVs
+        self.imax.set_data(self.series[self.current_frame][-1])
+        self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
+        self.draw_points_on_frame()
+        self.canvas.draw()
+        self.GUIelements['lblTitle']['text'] = 'Select box with background'
+        self.GUIelements['lblHelp']['text'] = 'Click somewhere with the left mousebutton to select the first corner of the box\nthen move and press again to select the second corner\nUse right mouse button to undo'
+        self.GUIelements['btn']['command'] = self.quit
+        self.GUIelements['btn']['text'] = "Done"
+        self.statusbar['text'] = "Select first point of background box"
+        self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_bgselector) # click to add/remove points 
+        self.movehandler = self.canvas.mpl_connect('motion_notify_event', self._onmove_bgselector) # move to update the current selection of points
+
+
+    def _onclick_bgselector(self, event):
+        """Handler for clicking the plot, handles drawing the background box
+        
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): Click event
+        """
+        coord = np.array([event.xdata, event.ydata]) # x,y coordinate of the clicked point
+
+        if event.button == MouseButton.LEFT and not self.mouseevent['press']:
+            self.mouseevent['press'] = True
+            self.mouseevent['start'] = coord
+            self.mouseevent['artist'] = matplotlib.patches.Rectangle(xy=coord,width=1.,height=1.,fill=False,edgecolor='r',linestyle='--')
+            self.ax.add_patch(self.mouseevent['artist'])
+            self.statusbar['text'] = 'Selected first corner, click again to set second corner'
+        
+        elif event.button == MouseButton.LEFT and self.mouseevent['press']: # 2nd click, set 2nd point of box and store
+            self.mouseevent['end'] = coord
+            distance = coord-self.mouseevent['start']
+            self.outputdata['background_box'] = np.append([self.mouseevent['start']],[coord]) # format (x1,y1,x2,y2)
+            
+            self.mouseevent['press'] = False
+            # [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
+            # self.mouseevent['artist'] = None
+            self.statusbar['text'] = f'Background box has been drawn, click button on top to continue...'
+        
+        if event.button == MouseButton.RIGHT: # remove closest point
+            self.outputdata['background_box'] = None
+            self.mouseevent['press'] = False
+            [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
+            self.mouseevent['artist'] = None
+            self.statusbar['text'] = 'Background box has been removed'
+
+        self.canvas.draw()
+
+    def _onmove_bgselector(self, event):
+        """Updates the box for background selection
+        
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): Mouse move event
+        """
+        if not self.mouseevent['press']: # only if pressed left mouse button before
+            return
+        
+        coord = np.array((event.xdata,event.ydata))
+        distance = coord-self.mouseevent['start']
+        self.mouseevent['artist'].set_width(distance[0]) 
+        self.mouseevent['artist'].set_height(distance[1]) 
+        self.canvas.draw() # redraw the canvas to show change in radius
     
     def quit(self):
-        """Destructor for the class
+        """Destructor for the class, checks whether everyting is done first
         """
+        if self.outputdata['background_box'] is None:
+            self.statusbar['text'] = "Can't proceed without selecting background"
+            return
         self.root.quit()
         self.root.destroy()
