@@ -2,6 +2,7 @@ from .nd2helper import ND2Stack
 import tkinter as tk
 import tkinter.ttk as ttk
 import numpy as np
+import numpy.linalg as la
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -29,14 +30,25 @@ class GUV_GUI:
         self.parameters = parameters
         print(self.parameters['directory'])
         self.series = stack.get_series(series_idx)
-        self.guv_points = {i: np.empty((0,2)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1],[x2,y2]]
-        # self.open_channelscroller()
+        self.guv_points = {i: np.empty((0,3)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1,r1],[x2,y2,r1]]
+        self.mouseevent = {
+            'press': False, 
+            'start': np.empty((2,)), 
+            'end': np.empty((2,)),
+            'artist': None,
+            }
         self.open_GUV_selector()
+
         guv_points_array = np.array(list(self.guv_points.values()))
+        guvs_per_frame = [guv_points_array[i].shape[0] for i in range(guv_points_array.shape[0])] 
+        nonempty_frames = [i for i in range(guv_points_array.shape[0]) if guvs_per_frame[i] > 0] 
+
         outputdata = {
             'points': guv_points_array, # array with points for all frames
-            'guv_frames': [i for i in range(guv_points_array.shape[0]) if guv_points_array[i].shape[0] > 0], # indices for frames that aren't empty
+            'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
+            'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
             }
+        # store data in .dat file in same folder as .nd2 file
         with open(os.path.join(self.parameters['directory'],"guv_points_series-%02d.dat" % self.series_idx),"wb") as outfile:
             pickle.dump(outputdata, outfile)
 
@@ -66,6 +78,8 @@ class GUV_GUI:
     def _onscroll_channelscroller(self, event):
         """Handler for scrolling events
 
+        Will move the image viewer to the next frame
+
         :param event: matplotlib
 
         """
@@ -84,7 +98,7 @@ class GUV_GUI:
         self.root.title("GUV selector")
         lbl = tk.Label(self.root, text='Select all GUVs')
         lbl.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        lbl2 = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select a GUV and the right mouse button to remove a selected point")
+        lbl2 = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select the centre of a GUV, click again to determine the radius\nand the right mouse button to remove a selected point")
         lbl2.pack(side=tk.TOP, fill=tk.BOTH)
         btn = tk.Button(self.root, text='Done', command=self.quit)
         btn.pack(side=tk.TOP, fill=tk.BOTH)
@@ -100,14 +114,15 @@ class GUV_GUI:
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.window)
         self.canvas.get_tk_widget().grid(row=0, column=0)
-        self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector)
-        self.canvas.mpl_connect('button_press_event', self._onclick_guvselector)
-        self.statusbar['text'] = 'Select GUVs'
+        self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
+        self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to add/remove points 
+        self.canvas.mpl_connect('motion_notify_event', self._onmove_guvselector) # move to update the current selection of points
+        self.statusbar['text'] = 'Select GUVs...'
         
         self.root.mainloop()
 
     def remove_all_points(self):
-        """Remove all artists (selected points) from the plot
+        """Remove all artists (selected points) from the plot, to replot them later
         """
         for a in reversed(self.ax.artists): # for some reason it only properly removes all points when reversed
             a.remove()
@@ -118,7 +133,7 @@ class GUV_GUI:
         self.remove_all_points()
         points = self.guv_points[self.current_frame]
         for point in points:
-            self.ax.add_artist(matplotlib.patches.Ellipse(xy=point,width=10.,height=10.,facecolor='r'))
+            self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],edgecolor='r',fill=False))
         self.canvas.draw()
 
     def find_closest_point_in_current_frame(self, point):
@@ -136,8 +151,8 @@ class GUV_GUI:
         points = self.guv_points[self.current_frame]
         if len(points) == 0:
             return -1
-        tree = KDTree(points)
-        return tree.query(point)[1] # index of closest point
+        tree = KDTree(points[:,0:2]) # only centers of circles
+        return tree.query(point[0:2])[1] # index of closest point
 
     def _onclick_guvselector(self, event):
         """Handler for clicking the plot
@@ -147,16 +162,48 @@ class GUV_GUI:
         Args:
             event (matplotlib.backend_bases.MouseEvent): Click event
         """
-        coord = (event.xdata, event.ydata)
-        if event.button == MouseButton.LEFT:
-            self.guv_points[self.current_frame] = np.append(self.guv_points[self.current_frame], np.array([coord]), axis=0)
-            self.statusbar['text'] = f'Point in frame {self.current_frame} has been added'
+        coord = np.array([event.xdata, event.ydata]) # x,y coordinate of the clicked point
+
+        if event.button == MouseButton.LEFT and not self.mouseevent['press']:
+            self.mouseevent['press'] = True
+            self.mouseevent['start'] = coord
+            self.mouseevent['artist'] = matplotlib.patches.Circle(xy=coord,radius=1.,fill=False,edgecolor='r',linestyle='--')
+            self.ax.add_patch(self.mouseevent['artist'])
+            self.canvas.draw()
+            self.statusbar['text'] = 'Selected centre, click again to set radius of the point'
+        
+        elif event.button == MouseButton.LEFT and self.mouseevent['press']: # 2nd click, add point with radius to list
+            self.mouseevent['end'] = coord
+            radius = la.norm(self.mouseevent['end'] - self.mouseevent['start'])
+            point = np.append(self.mouseevent['start'],[radius])
+            self.guv_points[self.current_frame] = np.append(self.guv_points[self.current_frame], [point], axis=0)
+            
+            self.mouseevent['press'] = False
+            [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
+            self.mouseevent['artist'] = None
+            self.statusbar['text'] = f'Point has been added to frame {self.current_frame}'
+        
         if event.button == MouseButton.RIGHT: # remove closest point
             idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
-            if idx_to_remove >= 0:
+            if idx_to_remove >= 0: 
                 self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
                 self.statusbar['text'] = 'Point has been removed'
+        
         self.draw_points_on_frame()
+
+    def _onmove_guvselector(self, event):
+        """Updates the radius of the circle that is used to add a point
+        
+        Args:
+            event (matplotlib.backend_bases.MouseEvent): Mouse move event
+        """
+        if not self.mouseevent['press']: # only if pressed left mouse button before
+            return
+        
+        coord = np.array((event.xdata,event.ydata))
+        radius = la.norm(coord - self.mouseevent['start'])
+        self.mouseevent['artist'].set_radius(radius) # update radius of temp circle
+        self.canvas.draw() # redraw the canvas to show change in radius
 
     def _onscroll_guvselector(self, event):
         """Handler for scrolling
@@ -166,10 +213,11 @@ class GUV_GUI:
         Args:
             event (matplotlib.backend_bases.MouseEvent): Scroll event
         """
-        if event.button == 'up':
+        if event.button == 'up': # scrolling up => increase current frame
             self.current_frame = (self.current_frame +
                                   1) % self.stack.series_length
-        elif event.button == 'down':
+        
+        elif event.button == 'down': # scrolling down => decrease current frame
             self.current_frame = (self.current_frame -
                                   1) % self.stack.series_length
         

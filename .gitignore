@@ -19,3 +19,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Project files
+test-*.ipynb
+*.dat
+*.nd2
