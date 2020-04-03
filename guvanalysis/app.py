@@ -19,7 +19,7 @@ class GUI:
         self.window = tk.Frame(self.root)
         self.window.pack(side="top", fill="both", expand=True)
         self.widgets = {'lblHelp': tk.Label(self.window, text="Select a file to open")}
-        self.widgets['lblHelp'].grid(row=1, columnspan=3, sticky=tk.EW)
+        self.widgets['lblHelp'].pack(side='top')
         self.parameters = {}
         self.open_nd2()
 
@@ -58,9 +58,9 @@ class GUI:
             if not v:
                 v = ''
             tvMeta.insert('', "end", text=k, values=(v))
-        tvMeta.grid(row=2, rowspan=2, sticky=tk.NE + tk.SW)
+        tvMeta.pack(side=tk.TOP, fill=tk.BOTH,expand=True)
         self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.open_seriesselector)
-        self.widgets['btnNext'].grid(row=4, sticky=tk.E)
+        self.widgets['btnNext'].pack(side=tk.TOP)
 
     def open_seriesselector(self):
         """Lets the user pick which series to analyse by showing the middle frame of each series"""
@@ -106,7 +106,9 @@ class GUI:
         """Open the GUV_GUI for every of the chosen series"""
         for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
-            GUV_GUI(self.stack, i, self.parameters)
+            gui = GUV_GUI(self.stack, i, self.parameters)
+            print(gui.get_data())
+            print("Do analysis of GUV sizes... (not implemented yet)")
         self.quit()
 
     def mainloop(self):

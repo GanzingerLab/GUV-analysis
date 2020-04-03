@@ -230,6 +230,7 @@ class GUV_GUI:
         guv_points_array = np.array(list(self.guv_points.values()))
         guvs_per_frame = [guv_points_array[i].shape[0] for i in range(guv_points_array.shape[0])] 
         nonempty_frames = [i for i in range(guv_points_array.shape[0]) if guvs_per_frame[i] > 0] 
+        self.current_frame = np.argmax(guvs_per_frame) # index of frame with highest number of GUVs
 
         if len(nonempty_frames) == 0:
             self.statusbar['text'] = 'First select at least 1 GUV to continue...'
@@ -240,13 +241,13 @@ class GUV_GUI:
             'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
             'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
             'background_box': None, # to be set later
+            'background_box_frame': self.current_frame, # frame in which the bg box was selected
             } # store also for later saving to file
         
         self.canvas.mpl_disconnect(self.scrollhandler)
         self.canvas.mpl_disconnect(self.presshandler)
         self.canvas.mpl_disconnect(self.movehandler)
 
-        self.current_frame = np.argmax(guvs_per_frame) # index of frame with highest number of GUVs
         self.imax.set_data(self.series[self.current_frame][-1])
         self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
         self.draw_points_on_frame()
@@ -259,6 +260,12 @@ class GUV_GUI:
         self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_bgselector) # click to add/remove points 
         self.movehandler = self.canvas.mpl_connect('motion_notify_event', self._onmove_bgselector) # move to update the current selection of points
 
+    def remove_bgbox(self):
+        self.outputdata['background_box'] = None
+        self.mouseevent['press'] = False
+        [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
+        self.mouseevent['artist'] = None
+        self.canvas.draw()
 
     def _onclick_bgselector(self, event):
         """Handler for clicking the plot, handles drawing the background box
@@ -269,6 +276,7 @@ class GUV_GUI:
         coord = np.array([event.xdata, event.ydata]) # x,y coordinate of the clicked point
 
         if event.button == MouseButton.LEFT and not self.mouseevent['press']:
+            self.remove_bgbox()
             self.mouseevent['press'] = True
             self.mouseevent['start'] = coord
             self.mouseevent['artist'] = matplotlib.patches.Rectangle(xy=coord,width=1.,height=1.,fill=False,edgecolor='r',linestyle='--')
@@ -281,15 +289,10 @@ class GUV_GUI:
             self.outputdata['background_box'] = np.append([self.mouseevent['start']],[coord]) # format (x1,y1,x2,y2)
             
             self.mouseevent['press'] = False
-            # [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
-            # self.mouseevent['artist'] = None
             self.statusbar['text'] = f'Background box has been drawn, click button on top to continue...'
         
         if event.button == MouseButton.RIGHT: # remove closest point
-            self.outputdata['background_box'] = None
-            self.mouseevent['press'] = False
-            [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
-            self.mouseevent['artist'] = None
+            self.remove_bgbox()
             self.statusbar['text'] = 'Background box has been removed'
 
         self.canvas.draw()
@@ -317,3 +320,11 @@ class GUV_GUI:
             return
         self.root.quit()
         self.root.destroy()
+    
+    def get_data(self):
+        """Returns the data (GUVs and background box)
+        
+        Returns:
+            dict: Dictionairy containing information about the GUVs and background
+        """
+        return self.outputdata
