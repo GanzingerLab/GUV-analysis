@@ -1,5 +1,6 @@
 alabaster==0.7.12
 argh==0.26.2
+astroid==2.3.3
 Babel==2.8.0
 backcall==0.1.0
 certifi==2019.11.28
@@ -14,14 +15,17 @@ imagesize==1.2.0
 ipykernel==5.2.0
 ipython==7.13.0
 ipython-genutils==0.2.0
+isort==4.3.21
 jedi==0.16.0
 Jinja2==2.11.1
 jupyter-client==6.1.2
 jupyter-core==4.6.3
 kiwisolver==1.1.0
+lazy-object-proxy==1.4.3
 livereload==2.6.1
 MarkupSafe==1.1.1
 matplotlib==3.2.1
+mccabe==0.6.1
 nd2reader==3.2.3
 networkx==2.4
 numpy==1.18.2
@@ -34,10 +38,12 @@ PIMS==0.4.1
 port-for==0.3.1
 prompt-toolkit==3.0.5
 Pygments==2.6.1
+pylint==2.4.4
 pyparsing==2.4.6
 python-dateutil==2.8.1
 pytz==2019.3
 PyWavelets==1.1.1
+pywin32==227
 PyYAML==5.3.1
 pyzmq==19.0.0
 requests==2.23.0
@@ -58,7 +64,9 @@ sphinxcontrib-qthelp==1.0.3
 sphinxcontrib-serializinghtml==1.1.4
 tornado==6.0.4
 traitlets==4.3.3
+typed-ast==1.4.1
 urllib3==1.25.8
 watchdog==0.10.2
 wcwidth==0.1.9
+wrapt==1.11.2
 xmltodict==0.12.0
