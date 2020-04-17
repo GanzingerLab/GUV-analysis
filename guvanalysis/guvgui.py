@@ -1,6 +1,6 @@
-from .nd2helper import ND2Stack
 import tkinter as tk
 import tkinter.ttk as ttk
+from nd2reader.reader import ND2Reader
 import numpy as np
 import numpy.linalg as la
 import matplotlib
@@ -18,7 +18,7 @@ class GUV_GUI:
     CHANNEL = 1 # channel to use for picking GUVs
     """Graphical User Interface for selecting GUVs from the microscopy data"""
 
-    def __init__(self, stack: ND2Stack = None, series_idx=0, parameters = {}):
+    def __init__(self, stack: ND2Reader = None, parameters = {}):
         """Initialize the GUI
         
         Keyword Arguments:
@@ -26,10 +26,9 @@ class GUV_GUI:
             series_idx {int} -- Index of the series to analyse (default: {0})
         """
         self.stack = stack
-        self.series_idx = series_idx
+        self.series_idx = self.stack.default_coords['v']
         self.parameters = parameters
-        self.series = stack.get_series(series_idx)
-        self.guv_points = {i: np.empty((0,3)) for i in range(self.stack.series_length)} # format self.guv_points[frame] = [[x1,y1,r1],[x2,y2,r1]]
+        self.guv_points = {i: np.empty((0,3)) for i in range(len(self.stack))} # format self.guv_points[frame] = [[x1,y1,r1],[x2,y2,r1]]
         self.mouseevent = {
             'press': False, 
             'start': np.empty((2,)), 
@@ -38,48 +37,10 @@ class GUV_GUI:
             }
         self.open_GUV_selector()
 
-        # store data in .dat file in same folder as .nd2 file
-        with open(os.path.join(self.parameters['directory'],"guv_points_series-%02d.dat" % self.series_idx),"wb") as outfile:
+        # store data in .pkl file in same folder as .nd2 file
+        outfile = self.parameters['filename'].replace(".nd2","_analysis-s%02d.pkl" % self.series_idx)
+        with open(outfile,"wb") as outfile:
             pickle.dump(self.outputdata, outfile)
-
-    def open_channelscroller(self):
-        """Display matplotlib figure of all channels next to each other through which the user can scroll"""
-        self.current_frame = 0
-        self.fig, self.axs = plt.subplots(1, self.stack.num_channels, figsize=(12, 5))
-        self.fig.suptitle("Showing frame %d/%d" %
-                          (self.current_frame, self.stack.series_length))
-        self.imaxs = []
-        for ch in range(self.stack.num_channels):
-            self.imaxs.append(self.axs[ch].imshow(
-                self.series[self.current_frame][ch]))
-            self.axs[ch].set_title("channel %d\n%s" % (ch, self.stack.stack.metadata['channels'][ch]))
-        self.fig.canvas.mpl_connect('scroll_event', self._onscroll_channelscroller)
-        plt.show()
-
-    def _update_channelscroller(self):
-        """Update the figures based on the current index"""
-        for ch in range(self.stack.num_channels):
-            self.imaxs[ch].set_data(
-                self.series[self.current_frame][ch])
-        self.fig.suptitle("Showing frame %d/%d" %
-                          (self.current_frame, self.stack.series_length))
-        self.fig.canvas.draw()
-
-    def _onscroll_channelscroller(self, event):
-        """Handler for scrolling events
-
-        Will move the image viewer to the next frame
-
-        :param event: matplotlib
-
-        """
-        if event.button == 'up':
-            self.current_frame = (self.current_frame +
-                                  1) % self.stack.series_length
-        elif event.button == 'down':
-            self.current_frame = (self.current_frame -
-                                  1) % self.stack.series_length
-        self._update_channelscroller()
 
     def open_GUV_selector(self):
         """Creates interface with a plot to scroll through the stack
@@ -99,8 +60,8 @@ class GUV_GUI:
 
         self.current_frame = 0
         self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=100)
-        self.imax = self.ax.imshow(self.series[self.current_frame][self.CHANNEL])
-        self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
+        self.imax = self.ax.imshow(self.stack[self.current_frame])
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.window)
         self.canvas.get_tk_widget().grid(row=0, column=0)
@@ -210,14 +171,14 @@ class GUV_GUI:
         """
         if event.button == 'up': # scrolling up => increase current frame
             self.current_frame = (self.current_frame +
-                                  1) % self.stack.series_length
+                                  1) % len(self.stack)
         
         elif event.button == 'down': # scrolling down => decrease current frame
             self.current_frame = (self.current_frame -
-                                  1) % self.stack.series_length
+                                  1) % len(self.stack)
         
-        self.imax.set_data(self.series[self.current_frame][self.CHANNEL])
-        self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
+        self.imax.set_data(self.stack[self.current_frame])
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
         self.draw_points_on_frame()
         self.canvas.draw()
 
@@ -237,6 +198,9 @@ class GUV_GUI:
             return
         
         self.outputdata = {
+            'filename': os.path.basename(self.parameters['filename']),
+            'directory': self.parameters['directory'],
+            'series_idx': self.series_idx,
             'points': guv_points_array, # array with points for all frames
             'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
             'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
@@ -248,8 +212,8 @@ class GUV_GUI:
         self.canvas.mpl_disconnect(self.presshandler)
         self.canvas.mpl_disconnect(self.movehandler)
 
-        self.imax.set_data(self.series[self.current_frame][-1])
-        self.ax.set_title(f'frame {self.current_frame}/{self.stack.series_length-1}')
+        self.imax.set_data(self.stack[self.current_frame])
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
         self.draw_points_on_frame()
         self.canvas.draw()
         self.GUIelements['lblTitle']['text'] = 'Select box with background'
@@ -285,7 +249,6 @@ class GUV_GUI:
         
         elif event.button == MouseButton.LEFT and self.mouseevent['press']: # 2nd click, set 2nd point of box and store
             self.mouseevent['end'] = coord
-            distance = coord-self.mouseevent['start']
             self.outputdata['background_box'] = np.append([self.mouseevent['start']],[coord]) # format (x1,y1,x2,y2)
             
             self.mouseevent['press'] = False

@@ -1,9 +1,9 @@
 import tkinter as tk
 import tkinter.filedialog as filedialog
 from tkinter import ttk
-from .nd2helper import ND2Stack
 from .guvgui import GUV_GUI
 from PIL import Image, ImageTk
+import pims 
 import os
 
 
@@ -47,24 +47,49 @@ class GUI:
     def process_nd2(self):
         """Loads the nd2 file into the class and obtains and displays the metadata from the file"""
 
-        self.stack = ND2Stack(self.parameters['filename'])
+        self.stack = pims.open(self.parameters['filename'])
+        self.stack.bundle_axes = 'vyx'
+        self.stack.iter_axes = 'z'
+        self.stack.default_coords['t'] = 0
         tvMeta = ttk.Treeview(self.window)
         tvMeta['columns'] = ("metaval")
         tvMeta.column("#0", width=250)
         tvMeta.column("metaval", minwidth=250)
         tvMeta.heading("#0", text="Key", anchor=tk.W)
         tvMeta.heading("metaval", text="Value", anchor=tk.W)
-        for k, v in self.stack.get_metadata():
+        for k, v in self.stack[0].metadata.items():
             if not v:
                 v = ''
             tvMeta.insert('', "end", text=k, values=(v))
         tvMeta.pack(side=tk.TOP, fill=tk.BOTH,expand=True)
-        self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.open_seriesselector)
+        self.widgets['btnNext'] = tk.Button(self.window, text="Select channel >", command=self.open_channelselector)
         self.widgets['btnNext'].pack(side=tk.TOP)
+
+    def open_channelselector(self):
+        self.destroy_all()
+
+        self.widgets['lblHelp'] = tk.Label(self.window, text='Channel to use')
+        self.widgets['lblHelp'].grid(column=0, row=0)
+        self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50)
+        for i,channel in enumerate(self.stack[0].metadata['channels']):
+            self.widgets['lbChannel'].insert(i,channel)
+        self.widgets['lbChannel'].activate(0)
+        self.widgets['lbChannel'].grid(column=1, row=0)
+        self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.extract_channelindex)
+        self.widgets['btnNext'].grid(column=1, row=1)
+    
+    def extract_channelindex(self):
+        """Obtain which channel the user has picked"""
+        if len(self.widgets['lbChannel'].curselection()) == 0:
+            print("Select a channel")
+            return
+        self.parameters['channel'] = int(self.widgets['lbChannel'].curselection()[0])
+        self.stack.default_coords['c'] = self.parameters['channel']
+        self.destroy_all()
+        self.open_seriesselector()
 
     def open_seriesselector(self):
         """Lets the user pick which series to analyse by showing the middle frame of each series"""
-
         self.destroy_all()
 
         self.widgets['tvSeries'] = ttk.Treeview(self.window)
@@ -80,11 +105,10 @@ class GUI:
         self.widgets['scrollSeries'] = ttk.Scrollbar(self.window, orient="vertical", command=self.widgets['tvSeries'].yview)
         self.widgets['scrollSeries'].pack(side="left", fill="y")
         self.widgets['tvSeries'].configure(yscrollcommand=self.widgets['scrollSeries'].set)
-
         self.images = [] # for some reason display images only works for members of the class, hence the `self.`
-        for i in range(self.stack.num_series):
+        for i in range(self.stack.sizes['v']):
             self.images.append(ImageTk.PhotoImage(
-                Image.fromarray(self.stack.get_series_midframe(i, -1)).convert("RGB").resize((75, 75))))
+                Image.fromarray(self.stack[self.stack.sizes['z']//2][i]).convert("RGB").resize((75, 75))))
             self.widgets['tvSeries'].insert('', 'end', iid=i, image=self.images[i], values=[f"Series {i}"])
         
         self.widgets['lblHelp'] = tk.Label(self.window, text='Select multiple by holding the Ctrl key')
@@ -98,7 +122,7 @@ class GUI:
         if len(self.widgets['tvSeries'].selection()) == 0:
             print("Select at least one series")
             return
-        self.parameters['selected_series'] = [int(i) for i in self.widgets['tvSeries'].selection()]
+        self.parameters['selected_series'] = list(map(int,self.widgets['tvSeries'].selection()))
         self.destroy_all()
         self.launch_GUV_GUI()
 
@@ -106,7 +130,9 @@ class GUI:
         """Open the GUV_GUI for every of the chosen series"""
         for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
-            gui = GUV_GUI(self.stack, i, self.parameters)
+            self.stack.bundle_axes = 'yx'
+            self.stack.default_coords['v'] = i
+            gui = GUV_GUI(self.stack, self.parameters)
             print(gui.get_data())
             print("Do analysis of GUV sizes... (not implemented yet)")
         self.quit()

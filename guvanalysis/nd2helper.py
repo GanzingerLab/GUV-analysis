@@ -15,10 +15,12 @@ class ND2Stack:
         self.stack = ND2Reader(filename)
         self.stack.iter_axes = 'vz'
         self.stack.bundle_axes = 'cyx'
+        self.stack.default_coords['t'] = 0
         self.num_series = self.stack.sizes['v']
         self.num_channels = self.stack.sizes['c']
         self.num_zslices = self.stack.sizes['z']
         self.series_length = self.num_zslices
+        self.pixelsize = self.stack.metadata['pixel_microns']
 
     def print_info(self):
         """Prints a quick summary of the file"""
