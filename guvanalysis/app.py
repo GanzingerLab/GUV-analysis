@@ -2,7 +2,10 @@ import tkinter as tk
 import tkinter.filedialog as filedialog
 from tkinter import ttk
 from .guvgui import GUV_GUI
+from .guvfinder import GUV_finder
+from .parameters import ParameterList
 from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
 import pims 
 import os
 
@@ -132,9 +135,14 @@ class GUI:
             print(f"Analysing series {i}")
             self.stack.bundle_axes = 'yx'
             self.stack.default_coords['v'] = i
-            gui = GUV_GUI(self.stack, self.parameters)
-            print(gui.get_data())
-            print("Do analysis of GUV sizes... (not implemented yet)")
+            finderparams = ParameterList(series=i, channel=self.parameters['channel'])
+            gui = GUV_finder(self.stack, finderparams)
+            data = gui.get_data()
+            if not data.empty:
+                selector = GUV_GUI(self.stack, data)
+            # gui.display_plots()
+            else:
+                print("No GUVs found in series %d" % i)
         self.quit()
 
     def mainloop(self):
@@ -144,7 +152,7 @@ class GUI:
     def quit(self):
         """Exits the program"""
         self.root.quit()
-        self.root.destroy()
+        # self.root.destroy()
 
 
 def run():

@@ -12,17 +12,12 @@ from nd2reader import ND2Reader # for handling the nd2 file with PIMS
 import pims # for loading files
 from pims.image_sequence import ImageSequenceND
 from PIL import Image # for image processing
-from collections import namedtuple # for easier handling of parameters
-# parameter_list = namedtuple("Parameters", "z_search_distance pixel_margin max_aspect_ratio min_radius") # define namedtuple for handling params
+from .parameters import ParameterList
 
 from skimage.filters import gaussian
 from skimage.measure import label,regionprops
 from skimage.feature import canny
 from scipy import ndimage as ndi
-
-class parameter_list(namedtuple("Parameters", "z_search_distance pixel_margin max_aspect_ratio min_radius")):
-    def hello(self):
-        return True
 
 class helpers:
     @staticmethod
@@ -91,15 +86,13 @@ class helpers:
 
 class GUV_finder:
 
-    def __init__(self, stack: ImageSequenceND, parameters: parameter_list, channel = 2, series_idx=None):
-        self.channel = channel
-        self.series_idx = series_idx
+    def __init__(self, stack: ImageSequenceND, parameters: ParameterList):
         self.stack = stack
         self.stack.bundle_axes = 'yx' # have only yx data in one frame
         self.stack.iter_axes = 'z' # iterate over the z axis
-        self.stack.default_coords['c'] = channel # select the correct channel
-        if series_idx and 'v' in self.stack.sizes:
-            self.stack.default_coords['v'] = series_idx # select the correct channel
+        self.stack.default_coords['c'] = parameters.channel # select the correct channel
+        if parameters.series and 'v' in self.stack.sizes:
+            self.stack.default_coords['v'] = parameters.series # select the correct channel
         self.stack.default_coords['t'] = 0 # single time
         self.metadata = self.stack.metadata
         self.frames = helpers.as_8bit(stack)
@@ -111,8 +104,9 @@ class GUV_finder:
         self.mean_image()
         self.determine_GUV_frame_size()
         self.determine_GUV_intensities()
-        self.plot_distributions()
-        self.annotate_frames()
+        if not self.guv_data.empty:
+            self.plot_distributions()
+            self.annotate_frames()
 
 
     def find_best_frame(self):
@@ -136,7 +130,7 @@ class GUV_finder:
         ax.scatter(xs,ys, c='r', s=3)
         plt.axis('off')
         fig.suptitle("Located centers from mean image")
-        print("Centers for %d GUVs were found" % len(self.radii))
+        print("Centers for %d GUVs were found in mean_image" % len(self.radii))
     
     def determine_GUV_frame_size(self):
         self.guv_properties = []
@@ -144,7 +138,7 @@ class GUV_finder:
             x,y = self.centroids[i]
             r = self.radii[i]+self.params.pixel_margin
             frames_for_finding_maxInt = helpers.bounded_range(range(self.best_frame-self.params.z_search_distance, self.best_frame+self.params.z_search_distance+1), 0, len(self.frames))
-            figw, figh = mpl.figure.figaspect(.1*len(frames_for_finding_maxInt))
+            # figw, figh = mpl.figure.figaspect(.1*len(frames_for_finding_maxInt))
             # _,ax = plt.subplots(2,len(frames_for_finding_maxInt),figsize=(figw, figh))
             local_regions = []
             for i,f in enumerate(frames_for_finding_maxInt):
@@ -173,16 +167,16 @@ class GUV_finder:
                                     })
             # ax[0,max_area_idx].set_title('best', c='r')
             # plt.tight_layout(pad=0.0, w_pad=0.1, h_pad=0.0)
+        print("After analysis, %d GUVs were found" % len(self.guv_properties))
 
     def determine_GUV_intensities(self):
-        intensity_channel = 0
-        self.stack.default_coords['c'] = intensity_channel
+        self.stack.default_coords['c'] = self.params.intensity_channel
         for guv in self.guv_properties:
             guv['intensity'] = helpers.scaled_GUV_intensity(self.frames[guv['frame']], {'x': guv['x'], 'y': guv['y'], 'r': np.ceil(guv['r']).astype(int)})
 
         # set channel back
-        self.stack.default_coords['c'] = self.channel
-        self.guv_data = pd.DataFrame(self.guv_properties)
+        self.stack.default_coords['c'] = self.params.channel
+        self.guv_data = pd.DataFrame(self.guv_properties, columns=['frame','x','y','area','r','intensity'])
 
     def plot_distributions(self):
         self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']
@@ -190,7 +184,7 @@ class GUV_finder:
         fig,ax = plt.subplots(1,3,figsize=(12,3))
         # print("Found %d GUVs with an average radius of %.02f ± %.02f µm" % )
         ax[0].hist(self.guv_data['r_um'])
-        ax[0].set_title(r"$\langle r \rangle$ = %.02f ± %.02f µm [ch. #%d]" % (self.guv_data['r_um'].mean(), self.guv_data['r_um'].std(), self.channel))
+        ax[0].set_title(r"$\langle r \rangle$ = %.02f ± %.02f µm [ch. #%d]" % (self.guv_data['r_um'].mean(), self.guv_data['r_um'].std(), self.params.channel))
         ax[0].set_xlabel(r"radius (µm)")
         ax[0].set_xlim(2.5,10.)
         # plt.savefig("histogram_radii_ch%d.png" % channel, bbox_inches='tight')
@@ -219,3 +213,9 @@ class GUV_finder:
                 axs[i].add_artist(Circle(xy=(guv['x'],guv['y']),radius=guv['r'],ec='r',facecolor='r',alpha=.45))
         fig.suptitle("GUVs per frame")
         plt.tight_layout(pad=0.1)
+
+    def get_data(self):
+        return self.guv_data
+
+    def display_plots(self):
+        plt.show()
