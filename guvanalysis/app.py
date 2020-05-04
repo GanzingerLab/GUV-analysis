@@ -140,7 +140,7 @@ class GUI:
             data = gui.get_data()
             if not data.empty:
                 selector = GUV_GUI(self.stack, data)
-            # gui.display_plots()
+                selector.store_data(self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i))
             else:
                 print("No GUVs found in series %d" % i)
         self.quit()
@@ -152,7 +152,6 @@ class GUI:
     def quit(self):
         """Exits the program"""
         self.root.quit()
-        # self.root.destroy()
 
 
 def run():

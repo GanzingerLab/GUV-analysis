@@ -32,29 +32,10 @@ class GUV_GUI:
         self.stack.bundle_axes = "yx"
         self.stack.iter_axes = "z"
         self.series_idx = self.stack.default_coords['v']
-        self.guv_points = dict(
-            map(
-                lambda f: (f,
-                np.array(guv_data.loc[guv_data['frame'] == f,['x','y','r']])
-                ), guv_data['frame'].unique())
-            ) # make dictonairy in the form of {framenum: np.array([x1,y1,r1],[x2,y2,r2]), framenum2: np.array(...)}
-        for i in range(len(stack)):
-            if i not in self.guv_points:
-                self.guv_points[i] = np.empty((0,3))
+        self.guv_data = guv_data
 
-
-        self.mouseevent = {
-            'press': False, 
-            'start': np.empty((2,)), 
-            'end': np.empty((2,)),
-            'artist': None,
-            }
         self.open_GUV_selector()
 
-        # store data in .pkl file in same folder as .nd2 file
-        # outfile = self.parameters['filename'].replace(".nd2","_analysis-s%02d.pkl" % self.series_idx)
-        # with open(outfile,"wb") as outfile:
-            # pickle.dump(self.outputdata, outfile)
 
     def open_GUV_selector(self):
         """Creates interface with a plot to scroll through the stack
@@ -65,7 +46,7 @@ class GUV_GUI:
         self.GUIelements['lblTitle'].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.GUIelements['lblHelp'] = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select the centre of a GUV, click again to determine the radius\nand the right mouse button to remove a selected point")
         self.GUIelements['lblHelp'].pack(side=tk.TOP, fill=tk.BOTH)
-        self.GUIelements['btn'] = tk.Button(self.root, text='Continue >', command=self.store_data)
+        self.GUIelements['btn'] = tk.Button(self.root, text='Continue >', command=self.quit)
         self.GUIelements['btn'].pack(side=tk.TOP, fill=tk.BOTH)
         self.window = tk.Frame(self.root)
         self.window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -76,6 +57,7 @@ class GUV_GUI:
         self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=100)
         self.imax = self.ax.imshow(self.stack[self.current_frame])
         self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
+        self.make_current_frame_points_array()
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.window)
         self.canvas.get_tk_widget().grid(row=0, column=0)
@@ -91,12 +73,23 @@ class GUV_GUI:
         for a in reversed(self.ax.artists): # for some reason it only properly removes all points when reversed
             a.remove()
     
+    def make_current_frame_points_array(self):
+        """Makes an array with points for the current shown frame
+
+        Only the x,y,r variables are selected from the dataframe and converted to 
+        a numpy array
+        """
+        subdf = self.guv_data.loc[self.guv_data['frame'] == self.current_frame,['x','y','r']]
+        if subdf.empty:
+            self.guv_points = np.empty(shape=(0,3))
+            return
+        self.guv_points = np.array(subdf)
+
     def draw_points_on_frame(self):
         """Draws artists (selected points) for the current frame
         """
         self.remove_all_points()
-        points = self.guv_points[self.current_frame]
-        for point in points:
+        for point in self.guv_points:
             self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],ec='r',facecolor='r',alpha=.45))
         self.canvas.draw()
 
@@ -112,11 +105,12 @@ class GUV_GUI:
         Returns:
             int: index of the closest point (-1 if no points were found)
         """
-        points = self.guv_points[self.current_frame]
-        if len(points) == 0:
+        if len(self.guv_points) == 0:
             return -1
-        tree = KDTree(points[:,0:2]) # only centers of circles
-        return tree.query(point[0:2])[1] # index of closest point
+        tree = KDTree(self.guv_points[:,0:2]) # only centers of circles
+        array_idx = tree.query(point[0:2])[1] # index of closest point within array
+        # convert the array index to the index of the row in the dataframe
+        return self.guv_data.index[self.guv_data['frame'] == self.current_frame][array_idx]
 
     def _onclick_guvselector(self, event):
         """Handler for clicking the plot
@@ -129,15 +123,11 @@ class GUV_GUI:
         coord = np.array([event.xdata, event.ydata]) # x,y coordinate of the clicked point
         
         if event.button == MouseButton.RIGHT: # remove closest point
-            if self.mouseevent['press']:
-                self.mouseevent['press'] = False
-                [a.remove() for a in reversed(self.ax.patches)] # remove temporary circle
-                self.mouseevent['artist'] = None
-            else:
-                idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
-                if idx_to_remove >= 0: 
-                    self.guv_points[self.current_frame] = np.delete(self.guv_points[self.current_frame], idx_to_remove, axis=0)
-                    self.statusbar['text'] = 'Point has been removed'
+            idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
+            if idx_to_remove >= 0:                     
+                self.guv_data = self.guv_data.drop(idx_to_remove)
+                self.statusbar['text'] = 'Point has been removed'
+                self.make_current_frame_points_array()
         
         self.draw_points_on_frame()
 
@@ -157,53 +147,35 @@ class GUV_GUI:
             self.current_frame = (self.current_frame -
                                   1) % len(self.stack)
         
-        self.imax.set_data(self.stack[self.current_frame])
-        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points[self.current_frame])} GUVs)')
+        self.imax.set_data(self.stack[self.current_frame])        
+        self.make_current_frame_points_array()
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points)} GUVs)')
         self.draw_points_on_frame()
         self.canvas.draw()
 
-    def store_data(self):
+    def store_data(self, filename):
         """GUI for selecting the background box
 
-        Removes all listeners first, then selects the frame to show (with most GUVs)
-        and then initiates the GUI for selecting the background box
+        Stores the correct dataframe as csv file to given location
+        and quit the program
         """
-        # guv_points_array = np.array(list(self.guv_points.values()))
-        # guvs_per_frame = [guv_points_array[i].shape[0] for i in range(guv_points_array.shape[0])] 
-        # nonempty_frames = [i for i in range(guv_points_array.shape[0]) if guvs_per_frame[i] > 0] 
-        # self.current_frame = np.argmax(guvs_per_frame) # index of frame with highest number of GUVs
-
-        # if len(nonempty_frames) == 0:
-        #     self.statusbar['text'] = 'First select at least 1 GUV to continue...'
-        #     return
-        
-        # self.outputdata = {
-        #     'filename': os.path.basename(self.parameters['filename']),
-        #     'directory': self.parameters['directory'],
-        #     'series_idx': self.series_idx,
-        #     'points': guv_points_array, # array with points for all frames
-        #     'guvs_per_frame': guvs_per_frame, # number of GUVs per frame
-        #     'nonempty_frames': nonempty_frames, # indices for frames that aren't empty
-        #     'background_box': None, # to be set later
-        #     'background_box_frame': self.current_frame, # frame in which the bg box was selected
-        #     } # store also for later saving to file
-        print("TODO: implement storing data")
-
-        self.canvas.mpl_disconnect(self.scrollhandler)
-        self.canvas.mpl_disconnect(self.presshandler)
+        self.guv_data.to_csv(filename, index=False, header=True)
 
         self.quit()
 
+
     def quit(self):
-        """Destructor for the class, checks whether everyting is done first
+        """Destructor for the class, removes listeners and closes windows
         """
+        self.canvas.mpl_disconnect(self.scrollhandler)
+        self.canvas.mpl_disconnect(self.presshandler)
+        plt.close('all')
         self.root.quit()
-        self.root.destroy()
     
     def get_data(self):
-        """Returns the data (GUVs and background box)
+        """Returns the data
         
         Returns:
-            dict: Dictionairy containing information about the GUVs and background
+            pd.DataFrame: Dataframe with information about sizes and positions of GUVs
         """
-        return self.outputdata
+        return self.guv_data

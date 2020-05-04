@@ -24,3 +24,4 @@ venv.bak/
 test-*.ipynb
 *.dat
 *.nd2
+*.csv
