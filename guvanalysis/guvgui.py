@@ -25,16 +25,15 @@ class GUV_GUI:
         """Initialize the GUI
         
         Keyword Arguments:
-            stack {ND2Stack} -- The stack to analyse (default: {None})
-            series_idx {int} -- Index of the series to analyse (default: {0})
+            stack {ImageSequenceND}: The stack to analyse
+            guv_data {pd.DataFrame}: DataFrame containing the positions (x,y) and radii (r) of the GUVs
         """
         self.stack = stack
         self.stack.bundle_axes = "yx"
-        self.stack.iter_axes = "z"
-        self.series_idx = self.stack.default_coords['v']
+        self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
         self.guv_data = guv_data
 
-        self.open_GUV_selector()
+        self.open_GUV_selector() # launch the GUI
 
 
     def open_GUV_selector(self):
@@ -42,9 +41,13 @@ class GUV_GUI:
         """
         self.root = tk.Tk()
         self.root.title("GUV selector")
-        self.GUIelements = {'lblTitle': tk.Label(self.root, text='Select all GUVs')}
+        self.GUIelements = {'lblTitle': tk.Label(self.root, text='Remove unwanted GUVs', font="-weight bold")}
         self.GUIelements['lblTitle'].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.GUIelements['lblHelp'] = tk.Label(self.root, text="Use the scroll wheel to scroll through the stack\nUse the left mouse button to select the centre of a GUV, click again to determine the radius\nand the right mouse button to remove a selected point")
+        self.GUIelements['lblHelp'] = tk.Label(self.root, text="""Green dots indicate the centers of all GUVs
+        Red circles indicate GUVs in the current frame
+        Use the scroll wheel to scroll through the stack
+        Use the right mouse button to remove a GUV by clicking near the red circle's center
+        Click the button below to save the data""")
         self.GUIelements['lblHelp'].pack(side=tk.TOP, fill=tk.BOTH)
         self.GUIelements['btn'] = tk.Button(self.root, text='Continue >', command=self.quit)
         self.GUIelements['btn'].pack(side=tk.TOP, fill=tk.BOTH)
@@ -55,15 +58,21 @@ class GUV_GUI:
 
         self.current_frame = 0
         self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=100)
+        self.ax.set_axis_off()
         self.imax = self.ax.imshow(self.stack[self.current_frame])
         self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
+        
+        xs,ys = zip(*np.array(self.guv_data[['x','y']]))
+        self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
+        plt.tight_layout()
+
         self.make_current_frame_points_array()
 
         self.canvas = FigureCanvasTkAgg(self.fig, self.window)
         self.canvas.get_tk_widget().grid(row=0, column=0)
         self.scrollhandler = self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
         self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to remove points 
-        self.statusbar['text'] = 'Select GUVs...'
+        self.statusbar['text'] = 'Remove unwanted GUVs...'
         
         self.root.mainloop()
 
@@ -89,6 +98,9 @@ class GUV_GUI:
         """Draws artists (selected points) for the current frame
         """
         self.remove_all_points()
+        xs,ys = zip(*np.array(self.guv_data[['x','y']]))
+        self.scax.remove()        
+        self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
         for point in self.guv_points:
             self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],ec='r',facecolor='r',alpha=.45))
         self.canvas.draw()
@@ -96,7 +108,7 @@ class GUV_GUI:
     def find_closest_point_in_current_frame(self, point):
         """Find the point closest to a given coordinate
 
-        Selects the index from self.guv_points that lies closest to
+        Selects the index from self.guv_data that lies closest to
         the given coordinate
         
         Args:
@@ -158,6 +170,9 @@ class GUV_GUI:
 
         Stores the correct dataframe as csv file to given location
         and quit the program
+
+        Args:
+            filename (str): Filename of the csv file in which the data is stored
         """
         self.guv_data.to_csv(filename, index=False, header=True)
 

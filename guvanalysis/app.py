@@ -51,7 +51,12 @@ class GUI:
         """Loads the nd2 file into the class and obtains and displays the metadata from the file"""
 
         self.stack = pims.open(self.parameters['filename'])
-        self.stack.bundle_axes = 'vyx'
+        if "v" in self.stack.sizes:
+            self.stack.bundle_axes = 'vyx'
+            self.has_multiple_series = True
+        else:
+            self.stack.bundle_axes = 'yx'
+            self.has_multiple_series = False
         self.stack.iter_axes = 'z'
         self.stack.default_coords['t'] = 0
         tvMeta = ttk.Treeview(self.window)
@@ -60,10 +65,10 @@ class GUI:
         tvMeta.column("metaval", minwidth=250)
         tvMeta.heading("#0", text="Key", anchor=tk.W)
         tvMeta.heading("metaval", text="Value", anchor=tk.W)
-        for k, v in self.stack[0].metadata.items():
-            if not v:
-                v = ''
-            tvMeta.insert('', "end", text=k, values=(v))
+        for metakey, metaval in self.stack[0].metadata.items():
+            if not metaval:
+                metaval = '' # replace attributes that can't be parsed with an empty string
+            tvMeta.insert('', "end", text=metakey, values=(metaval))
         tvMeta.pack(side=tk.TOP, fill=tk.BOTH,expand=True)
         self.widgets['btnNext'] = tk.Button(self.window, text="Select channel >", command=self.open_channelselector)
         self.widgets['btnNext'].pack(side=tk.TOP)
@@ -78,7 +83,10 @@ class GUI:
             self.widgets['lbChannel'].insert(i,channel)
         self.widgets['lbChannel'].activate(0)
         self.widgets['lbChannel'].grid(column=1, row=0)
-        self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.extract_channelindex)
+        if self.has_multiple_series:
+            self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.extract_channelindex)
+        else: 
+            self.widgets['btnNext'] = tk.Button(self.window, text="Analyse >", command=self.extract_channelindex)
         self.widgets['btnNext'].grid(column=1, row=1)
     
     def extract_channelindex(self):
@@ -89,7 +97,11 @@ class GUI:
         self.parameters['channel'] = int(self.widgets['lbChannel'].curselection()[0])
         self.stack.default_coords['c'] = self.parameters['channel']
         self.destroy_all()
-        self.open_seriesselector()
+        if self.has_multiple_series:
+            self.open_seriesselector()
+        else:
+            self.parameters['selected_series'] = [0] # dummy index for looping
+            self.launch_GUV_GUI()
 
     def open_seriesselector(self):
         """Lets the user pick which series to analyse by showing the middle frame of each series"""
@@ -134,13 +146,18 @@ class GUI:
         for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
             self.stack.bundle_axes = 'yx'
-            self.stack.default_coords['v'] = i
-            finderparams = ParameterList(series=i, channel=self.parameters['channel'])
+            if self.has_multiple_series:
+                self.stack.default_coords['v'] = i
+                finderparams = ParameterList(series=i, channel=self.parameters['channel'])
+            else:
+                finderparams = ParameterList(channel=self.parameters['channel'])
             gui = GUV_finder(self.stack, finderparams)
             data = gui.get_data()
             if not data.empty:
                 selector = GUV_GUI(self.stack, data)
-                selector.store_data(self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i))
+                csvfilename = self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i)
+                selector.store_data(csvfilename)
+                print("Data for %d GUVs was written to %s" % (selector.get_data().shape[0],csvfilename))
             else:
                 print("No GUVs found in series %d" % i)
         self.quit()

@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt # for plotting
 from matplotlib.patches import Circle
 # mpl.rcParams['figure.dpi'] = 150
 plt.rcParams['image.cmap'] = 'gray'
-import seaborn as sns
 
 import numpy as np
 import pandas as pd
