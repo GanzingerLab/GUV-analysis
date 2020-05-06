@@ -7,7 +7,7 @@ It can open `.nd2` files from the microscope, allows you to select the series yo
 
 ## Installation
 * Copy the files to a folder on your pc
-* Enter the directory (`cd GUV-analysis`)
+* Enter the directory in which this README file is (`cd GUV-analysis`, do not go into the `guvanalysis` subfolder)
 * Create a virtual environment for installing the required packages:<br>`python3 -m venv venv`<br>This creates the directory `venv` within the project to store the require packages
 * Activate the virtual environment 
     * On Windows: run `venv\Scripts\activate.bat`
