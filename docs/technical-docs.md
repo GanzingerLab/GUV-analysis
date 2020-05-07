@@ -17,3 +17,13 @@ If there is only one series, this step is skipped
 6. The function `launch_GUV_GUI()` will perform analysis of each of the selected series in the file after which the data is saved into a CSV file with a filename based on the filename of the `.nd2` file. If the file was named `some test file.nd2` the CSV file is saved into the same folder with the name `some test file_GUVdata-s0x.csv` with `x` being the index of the series (starting at 0)
 
 ## Description of the files
+
+* `guvanalysis/`
+  * `__init__.py` - dummy file such that the scripts get recognized as a python module
+  * `__main__.py` - the file that is executed on calling the module
+  * `app.py` - main file that handles everything and operates other files
+  * `guvfinder.py` - script for automatically detecting all GUVs in a series
+  * `guvgui.py` - script for deselecting unwanted features
+  * `parameters.py` - helper file that contains a class with parameters
+* `docs/` - contains documentation files
+* `README.md` - some short information on the module
