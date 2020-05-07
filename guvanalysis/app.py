@@ -76,25 +76,32 @@ class GUI:
     def open_channelselector(self):
         self.destroy_all()
 
-        self.widgets['lblHelp'] = tk.Label(self.window, text='Channel to use')
+        self.widgets['lblHelp'] = tk.Label(self.window, text='Channel for GUV size')
         self.widgets['lblHelp'].grid(column=0, row=0)
-        self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50)
+        self.widgets['lblIntChHelp'] = tk.Label(self.window, text='Channel for intensity')
+        self.widgets['lblIntChHelp'].grid(column=0, row=1)
+        self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, exportselection=0)
+        self.widgets['lbIntChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, exportselection=0)
         for i,channel in enumerate(self.stack[0].metadata['channels']):
             self.widgets['lbChannel'].insert(i,channel)
-        self.widgets['lbChannel'].activate(0)
+            self.widgets['lbIntChannel'].insert(i,channel)
+        self.widgets['lbChannel'].selection_set(first=(self.stack.sizes['c'] - 1))
+        self.widgets['lbIntChannel'].selection_set(first=0)
         self.widgets['lbChannel'].grid(column=1, row=0)
+        self.widgets['lbIntChannel'].grid(column=1, row=1)
         if self.has_multiple_series:
             self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.extract_channelindex)
         else: 
             self.widgets['btnNext'] = tk.Button(self.window, text="Analyse >", command=self.extract_channelindex)
-        self.widgets['btnNext'].grid(column=1, row=1)
+        self.widgets['btnNext'].grid(column=1, row=2)
     
     def extract_channelindex(self):
         """Obtain which channel the user has picked"""
-        if len(self.widgets['lbChannel'].curselection()) == 0:
+        if len(self.widgets['lbChannel'].curselection()) == 0 or len(self.widgets['lbIntChannel'].curselection()) == 0:
             print("Select a channel")
             return
         self.parameters['channel'] = int(self.widgets['lbChannel'].curselection()[0])
+        self.parameters['intensity_channel'] = int(self.widgets['lbIntChannel'].curselection()[0])
         self.stack.default_coords['c'] = self.parameters['channel']
         self.destroy_all()
         if self.has_multiple_series:
@@ -146,11 +153,11 @@ class GUI:
         for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
             self.stack.bundle_axes = 'yx'
+            finderparams = ParameterList(channel=self.parameters['channel'],
+                                         intensity_channel=self.parameters['intensity_channel'])
             if self.has_multiple_series:
                 self.stack.default_coords['v'] = i
-                finderparams = ParameterList(series=i, channel=self.parameters['channel'])
-            else:
-                finderparams = ParameterList(channel=self.parameters['channel'])
+                finderparams.series = i
             gui = GUV_finder(self.stack, finderparams)
             data = gui.get_data()
             if not data.empty:

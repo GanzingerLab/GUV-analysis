@@ -14,7 +14,8 @@ See the [installation file](docs/installation.md) in the docs directory.
 ## Running the code
 
 * Make sure you are in the right environment (See Installation > Activate the virtual environment)
-* Start the script with:<br>
-`python -m guvanalysis`
+* Start the script with:
+
+  `python -m guvanalysis`
 
 If you're done running the code (and closed the program), you can either close the terminal to deactivate the environment or follow the steps as described in the [installation file](docs/installation.md)

@@ -22,6 +22,8 @@ venv.bak/
 
 # Project files
 test-*.ipynb
+.ipynb_checkpoints
 *.dat
 *.nd2
 *.csv
+test*
