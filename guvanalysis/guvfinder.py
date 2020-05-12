@@ -53,6 +53,7 @@ class helpers:
         xmax = xlims[1] if xlims[1] < frame.shape[1] else frame.shape[1]-1
         ymin = ylims[0] if ylims[0] >= 0 else 0
         ymax = ylims[1] if ylims[1] < frame.shape[0] else frame.shape[0]-1
+        xmin,xmax,ymin,ymax = list(map(int, (xmin,xmax,ymin,ymax))) # convert all to integers
         newframe = frame[slice(ymin,ymax),slice(xmin,xmax)]
         if circular:
             area = newframe.size
@@ -77,7 +78,7 @@ class helpers:
         
     @staticmethod
     def ar(rp):
-        if rp['minor_axis_length'] == 0.:
+        if rp['minor_axis_length'] == 0.: # prevent division by zero
             return rp['major_axis_length']
         else:
             return rp['major_axis_length']/rp['minor_axis_length']
