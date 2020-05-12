@@ -17,8 +17,10 @@ class GUI:
         """Initialize the class and prompt for opening an nd2 file
         """
         self.root = tk.Tk()
-        self.root.geometry("750x500")
+        self.root.minsize(width=150, height=150)
+        self.root.maxsize(height=500)
         self.root.title("GUV analysis")
+        self.root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico"))
         self.window = tk.Frame(self.root)
         self.window.pack(side="top", fill="both", expand=True)
         self.widgets = {'lblHelp': tk.Label(self.window, text="Select a file to open")}
@@ -113,7 +115,7 @@ class GUI:
     def open_seriesselector(self):
         """Lets the user pick which series to analyse by showing the middle frame of each series"""
         self.destroy_all()
-
+        self.root.geometry("750x500")
         self.widgets['tvSeries'] = ttk.Treeview(self.window)
         self.widgets['tvSeries']['columns'] = ("metaval")
         self.widgets['tvSeries'].column("#0", width=250)

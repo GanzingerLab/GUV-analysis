@@ -18,4 +18,12 @@ See the [installation file](docs/installation.md) in the docs directory.
 
   `python -m guvanalysis`
 
+* Show plots (after analysis has been performed with above command):
+
+  `python -m guvanalysis --show-plots`
+
+* Show module help:
+
+  `python -m guvanalysis -h` (shows all command line options)
+  
 If you're done running the code (and closed the program), you can either close the terminal to deactivate the environment or follow the steps as described in the [installation file](docs/installation.md)
