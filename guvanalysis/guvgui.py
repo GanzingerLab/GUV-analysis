@@ -44,9 +44,9 @@ class GUV_GUI:
         self.GUIelements = {'lblTitle': tk.Label(self.root, text='Remove unwanted GUVs', font="-weight bold")}
         self.GUIelements['lblTitle'].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.GUIelements['lblHelp'] = tk.Label(self.root, text="""Green dots indicate the centers of all GUVs
-        Red circles indicate GUVs in the current frame
+        Yellow circles indicate GUVs in the current frame
         Use the scroll wheel to scroll through the stack
-        Use the right mouse button to remove a GUV by clicking near the red circle's center
+        Use the right mouse button to remove a GUV by clicking near the yellow circle's center
         Click the button below to save the data""")
         self.GUIelements['lblHelp'].pack(side=tk.TOP, fill=tk.BOTH)
         self.GUIelements['btn'] = tk.Button(self.root, text='Continue >', command=self.quit)
@@ -102,7 +102,7 @@ class GUV_GUI:
         self.scax.remove()        
         self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
         for point in self.guv_points:
-            self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],ec='r',facecolor='r',alpha=.45))
+            self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],ec='yellow',facecolor='yellow',alpha=.45))
         self.canvas.draw()
 
     def find_closest_point_in_current_frame(self, point):
@@ -184,7 +184,6 @@ class GUV_GUI:
         """
         self.canvas.mpl_disconnect(self.scrollhandler)
         self.canvas.mpl_disconnect(self.presshandler)
-        # plt.close('all')
         self.root.quit()
     
     def get_data(self):

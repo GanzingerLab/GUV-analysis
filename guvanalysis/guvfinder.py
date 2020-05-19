@@ -41,7 +41,6 @@ class helpers:
             if i >= min_val and i <= max_val:
                 l.append(i)
         return l
-    #     return slice(np.min(l),np.max(l)+1)
 
     @staticmethod
     @pims.pipeline
@@ -106,98 +105,13 @@ class GUV_finder:
 
         self.params = parameters
 
-        # self.intermediates = {}
-        # self.find_best_frame()
-        # self.mean_image()
-        # self.determine_GUV_frame_size()
-        # self.determine_GUV_intensities()
         self.find_GUVs_in_all_frames()
         self.link_GUV_points()
         self.get_GUVs_from_linked_points()
-        # if not self.guv_data.empty:
-            # self.plot_distributions()
-            # self.annotate_frames()
-
-
-    def find_best_frame(self):
-        total_intensities = np.zeros((len(self.frames)))
-        for i,f in enumerate(self.frames):
-            total_intensities[i] = helpers.gaussian_5px(f).sum()
-        self.best_frame = np.argmax(total_intensities[1:])+1 # exclude first frame
-        print("Best frame was found at z =", self.best_frame)
-        best_frame_input = input(f"Press enter to continue or enter other frame (< {len(self.frames)}): ")
-        if best_frame_input:
-            best_frame_input = int(best_frame_input)
-            if best_frame_input >= 0 and best_frame_input < len(self.frames):
-                self.best_frame = best_frame_input
-            else:
-                print(f"Frame {best_frame_input} not present, script continues with {self.best_frame}")
-
-
-    def mean_image(self):
-        frames_for_mean = helpers.bounded_range(range(self.best_frame-3, self.best_frame+4), 0, len(self.frames)) # make a sublist of 3 frames below and above best_frame (if possible)
-        self.intermediates['mean'] = helpers.as_8bit(np.array(helpers.gaussian_5px(self.frames[frames_for_mean])).mean(axis=0)) # take the mean image of that substack
-        self.intermediates['mean_filled'] = ndi.binary_fill_holes(canny(self.intermediates['mean'],sigma=3, low_threshold=20, high_threshold=50)) # do an edge detection and fill the holes 
-        regions = regionprops(label(self.intermediates['mean_filled'])) # get information about the different regions in the image
-
-        self.centroids = np.ceil(np.array(list(map(lambda x: (x.centroid[1], x.centroid[0]), regions)))).astype(np.uint) # get the centres of each of the GUVs
-        self.radii = np.ceil(0.5 * np.array(list(map(lambda x: x.major_axis_length, regions)))).astype(np.uint) # and their respective radii
-
-        fig,ax = plt.subplots(1,2)
-        ax[0].imshow(self.intermediates['mean'])
-        ax[1].imshow(self.intermediates['mean_filled'])
-        xs,ys = zip(*self.centroids)
-        ax[0].scatter(xs,ys, c='r', s=3)
-        ax[1].scatter(xs,ys, c='r', s=3)
-        plt.axis('off')
-        fig.suptitle("Located centers from mean image")
-        print("Centers for %d GUVs were found in mean_image" % len(self.radii))
-    
-    def determine_GUV_frame_size(self):
-        self.guv_properties = []
-        for i in range(len(self.centroids)):
-            x,y = self.centroids[i]
-            r = self.radii[i]+self.params.pixel_margin
-            frames_for_finding_maxInt = helpers.bounded_range(range(self.best_frame-self.params.z_search_distance, self.best_frame+self.params.z_search_distance+1), 0, len(self.frames))
-            # figw, figh = mpl.figure.figaspect(.1*len(frames_for_finding_maxInt))
-            # _,ax = plt.subplots(2,len(frames_for_finding_maxInt),figsize=(figw, figh))
-            local_regions = []
-            for i,f in enumerate(frames_for_finding_maxInt):
-                img_raw,xmin,ymin = helpers.image_subregion(self.frames[f], [x-r,x+r], [y-r,y+r])
-                # ax[0,i].imshow(img_raw)
-                # ax[0,i].axis('off')
-                img = helpers.process_find_edges(img_raw)
-                regs = regionprops(label(img))
-                filtered_regs = filter(lambda x: helpers.ar(x) < self.params.max_aspect_ratio, regs) # filter regions with a too high aspect ratio 
-                sorted_local_regions = sorted(filtered_regs, key = lambda i: i['area']) # sort filtered regions by decreasing area
-                if sorted_local_regions: 
-                    local_regions.append(sorted_local_regions[0])
-                else:
-                    local_regions.append({'area': 0, 'centroid': (0,0), 'major_axis_length': 0.}) # no regions found, so add empty one
-                # ax[1,i].imshow(img)
-                # ax[1,i].axis('off')
-                # ax[1,i].set_title(r"↓")
-            areas = list(map(lambda x: x['area'], local_regions))
-            max_area_idx = np.argmax(areas)
-            if local_regions[max_area_idx]['major_axis_length'] > self.params.min_radius:
-                self.guv_properties.append({'frame': frames_for_finding_maxInt[max_area_idx],
-                                    'x': np.round(local_regions[max_area_idx]['centroid'][1]+xmin).astype(int),
-                                    'y': np.round(local_regions[max_area_idx]['centroid'][0]+ymin).astype(int),
-                                    'area': local_regions[max_area_idx]['area'],
-                                    'r': np.sqrt(local_regions[max_area_idx]['area']/np.pi), # spherical, so calculate r from area
-                                    })
-            # ax[0,max_area_idx].set_title('best', c='r')
-            # plt.tight_layout(pad=0.0, w_pad=0.1, h_pad=0.0)
-        print("After analysis, %d GUVs were found" % len(self.guv_properties))
-
-    def determine_GUV_intensities(self):
-        self.stack.default_coords['c'] = self.params.intensity_channel
-        for guv in self.guv_properties:
-            guv['intensity'] = helpers.scaled_GUV_intensity(self.frames[guv['frame']], {'x': guv['x'], 'y': guv['y'], 'r': np.ceil(guv['r']).astype(int)})
-
-        # set channel back
-        self.stack.default_coords['c'] = self.params.channel
-        self.guv_data = pd.DataFrame(self.guv_properties, columns=['frame','x','y','area','r','intensity'])
+        self.determine_GUV_intensities()
+        if not self.guv_data.empty:
+            self.plot_distributions()
+            self.annotate_frames()
 
     def find_GUVs_in_all_frames(self):
         self.frames_filled = []
@@ -292,6 +206,17 @@ class GUV_finder:
         self.frames_regions = self.frames_regions[(self.frames_regions['num_points'] > 2) & (self.frames_regions['guv_id'] != -1)].copy()
         self.guv_data = self.frames_regions.sort_values('area', ascending=False).drop_duplicates(['guv_id']) # sort by area and use only the one with largest area
 
+    def determine_GUV_intensities(self):
+        self.stack.default_coords['c'] = self.params.intensity_channel
+        intensities = []
+        for _,guv in self.guv_data.iterrows():
+            intensities.append(helpers.scaled_GUV_intensity(self.frames[guv['frame']], {'x': guv['x'], 'y': guv['y'], 'r': np.ceil(guv['r']).astype(int)}))
+        
+        self.guv_data['intensity'] = intensities
+
+        # set channel back
+        self.stack.default_coords['c'] = self.params.channel
+
     def plot_distributions(self):
         self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']
 
@@ -316,15 +241,15 @@ class GUV_finder:
         fig.suptitle(r"Distributions $(N = %d)$" % self.guv_data.shape[0])
 
     def annotate_frames(self):
-        nonempty_frames = np.unique(list(map(lambda x: x['frame'], self.guv_properties)))
+        nonempty_frames = np.unique(self.guv_data['frame'])
         fig,axs = plt.subplots(1,len(nonempty_frames), figsize=(5*len(nonempty_frames),5))
         for i,f in enumerate(nonempty_frames):
-            guvs = list(filter(lambda x: x['frame'] == f,self.guv_properties))
+            guvs = self.guv_data[self.guv_data['frame'] == f]
             axs[i].imshow(self.frames[f])
             axs[i].set_title("%d GUVs at z=%d" % (len(guvs), f))
             axs[i].axis('off')
-            for guv in guvs:
-                axs[i].add_artist(Circle(xy=(guv['x'],guv['y']),radius=guv['r'],ec='r',facecolor='r',alpha=.45))
+            for _,guv in guvs.iterrows():
+                axs[i].add_artist(Circle(xy=(guv['x'],guv['y']),radius=guv['r'],ec='yellow',facecolor='yellow',alpha=.45))
         fig.suptitle("GUVs per frame")
         plt.tight_layout(pad=0.1)
 
