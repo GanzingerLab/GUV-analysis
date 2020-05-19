@@ -163,6 +163,7 @@ class GUI:
             gui = GUV_finder(self.stack, finderparams)
             data = gui.get_data()
             if not data.empty:
+                plt.show()
                 selector = GUV_GUI(self.stack, data)
                 csvfilename = self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i)
                 selector.store_data(csvfilename)

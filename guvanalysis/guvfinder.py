@@ -11,10 +11,11 @@ from nd2reader import ND2Reader # for handling the nd2 file with PIMS
 import pims # for loading files
 from pims.image_sequence import ImageSequenceND
 from PIL import Image # for image processing
+from numpy.linalg import norm
 from .parameters import ParameterList
 
 from skimage.filters import gaussian
-from skimage.measure import label,regionprops
+from skimage.measure import label,regionprops,regionprops_table
 from skimage.feature import canny
 from scipy import ndimage as ndi
 
@@ -83,6 +84,12 @@ class helpers:
         else:
             return rp['major_axis_length']/rp['minor_axis_length']
 
+    @staticmethod
+    def filter_GUV_dataframe(dataframe, params):
+        df = dataframe[dataframe['ar'] <= params.max_aspect_ratio]
+        df = df[df['r'] >= params.min_radius]
+        return df
+
 
 class GUV_finder:
 
@@ -99,21 +106,33 @@ class GUV_finder:
 
         self.params = parameters
 
-        self.intermediates = {}
-        self.find_best_frame()
-        self.mean_image()
-        self.determine_GUV_frame_size()
-        self.determine_GUV_intensities()
-        if not self.guv_data.empty:
-            self.plot_distributions()
-            self.annotate_frames()
+        # self.intermediates = {}
+        # self.find_best_frame()
+        # self.mean_image()
+        # self.determine_GUV_frame_size()
+        # self.determine_GUV_intensities()
+        self.find_GUVs_in_all_frames()
+        self.link_GUV_points()
+        self.get_GUVs_from_linked_points()
+        # if not self.guv_data.empty:
+            # self.plot_distributions()
+            # self.annotate_frames()
 
 
     def find_best_frame(self):
         total_intensities = np.zeros((len(self.frames)))
         for i,f in enumerate(self.frames):
             total_intensities[i] = helpers.gaussian_5px(f).sum()
-        self.best_frame = np.argmax(total_intensities[1:])+1
+        self.best_frame = np.argmax(total_intensities[1:])+1 # exclude first frame
+        print("Best frame was found at z =", self.best_frame)
+        best_frame_input = input(f"Press enter to continue or enter other frame (< {len(self.frames)}): ")
+        if best_frame_input:
+            best_frame_input = int(best_frame_input)
+            if best_frame_input >= 0 and best_frame_input < len(self.frames):
+                self.best_frame = best_frame_input
+            else:
+                print(f"Frame {best_frame_input} not present, script continues with {self.best_frame}")
+
 
     def mean_image(self):
         frames_for_mean = helpers.bounded_range(range(self.best_frame-3, self.best_frame+4), 0, len(self.frames)) # make a sublist of 3 frames below and above best_frame (if possible)
@@ -124,10 +143,12 @@ class GUV_finder:
         self.centroids = np.ceil(np.array(list(map(lambda x: (x.centroid[1], x.centroid[0]), regions)))).astype(np.uint) # get the centres of each of the GUVs
         self.radii = np.ceil(0.5 * np.array(list(map(lambda x: x.major_axis_length, regions)))).astype(np.uint) # and their respective radii
 
-        fig,ax = plt.subplots(1,1)
-        ax.imshow(self.intermediates['mean'])
+        fig,ax = plt.subplots(1,2)
+        ax[0].imshow(self.intermediates['mean'])
+        ax[1].imshow(self.intermediates['mean_filled'])
         xs,ys = zip(*self.centroids)
-        ax.scatter(xs,ys, c='r', s=3)
+        ax[0].scatter(xs,ys, c='r', s=3)
+        ax[1].scatter(xs,ys, c='r', s=3)
         plt.axis('off')
         fig.suptitle("Located centers from mean image")
         print("Centers for %d GUVs were found in mean_image" % len(self.radii))
@@ -177,6 +198,99 @@ class GUV_finder:
         # set channel back
         self.stack.default_coords['c'] = self.params.channel
         self.guv_data = pd.DataFrame(self.guv_properties, columns=['frame','x','y','area','r','intensity'])
+
+    def find_GUVs_in_all_frames(self):
+        self.frames_filled = []
+        dfcols = ('frame', 'x', 'y', 'r', 'area', 'ar')
+        self.frames_regions = pd.DataFrame(columns=dfcols)
+        for i,frame in enumerate(self.frames):
+            self.frames_filled.append(helpers.process_find_edges(frame))
+            frame_regions = regionprops_table(label(self.frames_filled[i]), properties = ('centroid', 'major_axis_length', 'minor_axis_length', 'area'))
+            if frame_regions:
+                # rename columns and delete old ones
+                frame_regions['x'] = frame_regions['centroid-1']
+                frame_regions['y'] = frame_regions['centroid-0']
+                del frame_regions['centroid-0']
+                del frame_regions['centroid-1']  
+
+                # initialize dataframe for easier merging and data storage  
+                frame_regions_df = pd.DataFrame(frame_regions)
+                frame_regions_df['minor_axis_length'].apply(lambda x: 1. if x == 0. else x)
+                frame_regions_df['ar'] = frame_regions_df['major_axis_length']/frame_regions_df['minor_axis_length']
+                frame_regions_df = frame_regions_df.drop(columns = ['minor_axis_length', 'major_axis_length'])
+                frame_regions_df['r'] = np.sqrt(frame_regions_df['area']/np.pi)
+                frame_regions_df['frame'] = i
+
+                # append to dataframe that holds all GUVs
+                self.frames_regions = self.frames_regions.append(helpers.filter_GUV_dataframe(frame_regions_df, self.params),
+                                                                 ignore_index=True)
+    def link_GUV_points(self):
+        points = np.array(self.frames_regions[['x','y','frame']]) # only coords
+        num_points = len(points)
+
+        # initialize arrays for storing distances in xy plane and z separately (as z corresponds to frame)
+        xydistances = np.zeros(shape=(num_points,num_points))
+        zdistances = np.zeros(shape=(num_points,num_points))
+
+        for i in range(num_points-1):
+            for j in range(i,num_points):
+                xydist = norm(points[i,:2] - points[j,:2])
+                zdist = norm(points[i,2] - points[j,2])
+                xydistances[i,j] = xydist
+                zdistances[i,j] = zdist
+
+        zmask = zdistances<=2.
+        samemask = zdistances != 0.
+        xymask = xydistances<=self.params.min_radius
+        valid_neighbours = zmask & samemask & xymask
+        pairs = np.transpose((valid_neighbours).nonzero()) # create list of pairs of indices that are neighbours
+        # outputs [(1,2),(2,3),(4,5),...] for all points that are classified as neighbours on the above criterea
+        
+        # we need to link all points that have common neighbours
+        # e.g. if 1 neighbours 2 and 2 neighbours 3, we need to make a list containing [1,2,3]
+        labels = {}
+        maxlabel = 0
+        curlabel = False
+        for i,pair in enumerate(pairs):
+            for list_label,list_items in labels.items():
+                if pair[0] in list_items or pair[1] in list_items: # see if either of the two indices is already present in some list
+                    curlabel = list_label
+                    continue # we do not need to look further once we found one occurence
+            
+            if curlabel is not False: # add both items to the list in which at least one was already present
+                labels[curlabel].append(pair[0])
+                labels[curlabel].append(pair[1])
+            else: # create new list
+                curlabel = maxlabel
+                labels[curlabel] = list(pair)
+                maxlabel = maxlabel+1
+
+            for j in range(i,len(pairs)): # look for other occurrences with these indices in all other pairs
+                if pair[0] in pairs[j] or pair[1] in pairs[j]:
+                    labels[curlabel].append(pairs[j][0])
+                    labels[curlabel].append(pairs[j][1])            
+            
+            labels[curlabel] = list(np.unique(labels[curlabel])) # remove duplicates
+            curlabel = False # reset label
+
+        # make the inverse array, e.g. {point_index: label, point2_index: label2, ...}
+        inv_classifications = {}
+        for classification,pointlist in labels.items():
+            for p in pointlist:
+                inv_classifications[p] = classification
+
+        # add missing points
+        for i in range(len(points)):
+            if not i in inv_classifications:
+                inv_classifications[i] = -1 # assign label -1 to all points that are on their own
+        
+        inv_classifications_sort = dict(sorted(inv_classifications.items())) # sort the dictonairy by key
+        self.frames_regions['guv_id'] = list(inv_classifications_sort.values()) # assign the labels as 'guv_id' column
+
+    def get_GUVs_from_linked_points(self):
+        self.frames_regions['num_points'] = self.frames_regions.groupby(['guv_id'])['guv_id'].transform(len) # number of points corresponding to a certain GUV
+        self.frames_regions = self.frames_regions[(self.frames_regions['num_points'] > 2) & (self.frames_regions['guv_id'] != -1)].copy()
+        self.guv_data = self.frames_regions.sort_values('area', ascending=False).drop_duplicates(['guv_id']) # sort by area and use only the one with largest area
 
     def plot_distributions(self):
         self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']

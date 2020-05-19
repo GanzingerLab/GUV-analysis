@@ -6,6 +6,7 @@ import numpy.linalg as la
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
+plt.rcParams['image.cmap'] = 'gray'
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.patches
@@ -18,7 +19,6 @@ import pickle
 import os
 
 class GUV_GUI:
-    CHANNEL = 1 # channel to use for picking GUVs
     """Graphical User Interface for selecting GUVs from the microscopy data"""
 
     def __init__(self, stack: ImageSequenceND, guv_data: DataFrame):
@@ -161,7 +161,7 @@ class GUV_GUI:
         
         self.imax.set_data(self.stack[self.current_frame])        
         self.make_current_frame_points_array()
-        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points)} GUVs)')
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points)} GUVs) [{len(self.guv_data)} in total]')
         self.draw_points_on_frame()
         self.canvas.draw()
 
@@ -184,7 +184,7 @@ class GUV_GUI:
         """
         self.canvas.mpl_disconnect(self.scrollhandler)
         self.canvas.mpl_disconnect(self.presshandler)
-        plt.close('all')
+        # plt.close('all')
         self.root.quit()
     
     def get_data(self):
