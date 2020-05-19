@@ -6,3 +6,4 @@ matplotlib==3.2.1
 numpy==1.18.2
 PIMS==0.4.1
 Pillow==7.1.2
+seaborn==0.10.0
