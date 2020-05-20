@@ -1,8 +1,7 @@
 import tkinter as tk
 import tkinter.filedialog as filedialog
 from tkinter import ttk
-from .guvgui import GUV_GUI
-from .guvfinder import GUV_finder
+from .guvcontrol import GUV_Control
 from .parameters import ParameterList
 from PIL import Image, ImageTk
 import matplotlib.pyplot as plt
@@ -160,16 +159,9 @@ class GUI:
             if self.has_multiple_series:
                 self.stack.default_coords['v'] = i
                 finderparams.series = i
-            gui = GUV_finder(self.stack, finderparams)
-            data = gui.get_data()
-            if not data.empty:
-                plt.show()
-                selector = GUV_GUI(self.stack, data)
-                csvfilename = self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i)
-                selector.store_data(csvfilename)
-                print("Data for %d GUVs was written to %s" % (selector.get_data().shape[0],csvfilename))
-            else:
-                print("No GUVs found in series %d" % i)
+            csvfilename = self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i)
+            gui = GUV_Control(self.stack, finderparams, csvfilename)
+            
         self.quit()
 
     def mainloop(self):

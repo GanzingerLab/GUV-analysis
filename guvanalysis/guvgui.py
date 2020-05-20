@@ -21,60 +21,54 @@ import os
 class GUV_GUI:
     """Graphical User Interface for selecting GUVs from the microscopy data"""
 
-    def __init__(self, stack: ImageSequenceND, guv_data: DataFrame):
+    def __init__(self, stack: ImageSequenceND, guv_data: DataFrame, canvas: FigureCanvasTkAgg, figure: Figure):
         """Initialize the GUI
         
         Keyword Arguments:
             stack {ImageSequenceND}: The stack to analyse
             guv_data {pd.DataFrame}: DataFrame containing the positions (x,y) and radii (r) of the GUVs
+            canvas {FigureCanvasTkAgg}: The canvas used to plot
+            figure {Figure}: The figure object used to plot
         """
         self.stack = stack
         self.stack.bundle_axes = "yx"
         self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
         self.guv_data = guv_data
 
+        self.canvas = canvas
+        self.fig = figure
+
         self.open_GUV_selector() # launch the GUI
+
+    def renew(self, guv_data):
+        self.guv_data = guv_data
+        self.open_GUV_selector()
 
 
     def open_GUV_selector(self):
         """Creates interface with a plot to scroll through the stack
         """
-        self.root = tk.Tk()
-        self.root.title("GUV selector")
-        self.GUIelements = {'lblTitle': tk.Label(self.root, text='Remove unwanted GUVs', font="-weight bold")}
-        self.GUIelements['lblTitle'].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.GUIelements['lblHelp'] = tk.Label(self.root, text="""Green dots indicate the centers of all GUVs
-        Yellow circles indicate GUVs in the current frame
-        Use the scroll wheel to scroll through the stack
-        Use the right mouse button to remove a GUV by clicking near the yellow circle's center
-        Click the button below to save the data""")
-        self.GUIelements['lblHelp'].pack(side=tk.TOP, fill=tk.BOTH)
-        self.GUIelements['btn'] = tk.Button(self.root, text='Continue >', command=self.quit)
-        self.GUIelements['btn'].pack(side=tk.TOP, fill=tk.BOTH)
-        self.window = tk.Frame(self.root)
-        self.window.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.statusbar = tk.Label(self.root, text='', bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
-
         self.current_frame = 0
-        self.fig, self.ax = plt.subplots(1,1,figsize=(5,5),dpi=100)
+        # self.fig = figure
+        # plt.figure will block the tkinter mainloop and prevent the program from exiting: https://stackoverflow.com/a/17535868
+        self.make_current_frame_points_array()
+        self.fig.clear()
+        self.ax = self.fig.add_subplot(111)
         self.ax.set_axis_off()
         self.imax = self.ax.imshow(self.stack[self.current_frame])
-        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}')
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}  ({len(self.guv_points)} GUVs)')
         
-        xs,ys = zip(*np.array(self.guv_data[['x','y']]))
+        if self.guv_data.empty:
+            xs,ys = [],[]
+        else:
+            xs,ys = zip(*np.array(self.guv_data[['x','y']]))
         self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
         plt.tight_layout()
 
-        self.make_current_frame_points_array()
-
-        self.canvas = FigureCanvasTkAgg(self.fig, self.window)
-        self.canvas.get_tk_widget().grid(row=0, column=0)
         self.scrollhandler = self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
         self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to remove points 
-        self.statusbar['text'] = 'Remove unwanted GUVs...'
         
-        self.root.mainloop()
+        # self.root.mainloop()
 
     def remove_all_points(self):
         """Remove all artists (selected points) from the plot, to replot them later
@@ -98,7 +92,10 @@ class GUV_GUI:
         """Draws artists (selected points) for the current frame
         """
         self.remove_all_points()
-        xs,ys = zip(*np.array(self.guv_data[['x','y']]))
+        if self.guv_data.empty:
+            xs,ys = [],[]
+        else:
+            xs,ys = zip(*np.array(self.guv_data[['x','y']]))
         self.scax.remove()        
         self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
         for point in self.guv_points:
@@ -138,7 +135,6 @@ class GUV_GUI:
             idx_to_remove = self.find_closest_point_in_current_frame(np.array(coord))
             if idx_to_remove >= 0:                     
                 self.guv_data = self.guv_data.drop(idx_to_remove)
-                self.statusbar['text'] = 'Point has been removed'
                 self.make_current_frame_points_array()
         
         self.draw_points_on_frame()
@@ -161,7 +157,7 @@ class GUV_GUI:
         
         self.imax.set_data(self.stack[self.current_frame])        
         self.make_current_frame_points_array()
-        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points)} GUVs) [{len(self.guv_data)} in total]')
+        self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1} ({len(self.guv_points)} GUVs)')
         self.draw_points_on_frame()
         self.canvas.draw()
 
@@ -184,7 +180,7 @@ class GUV_GUI:
         """
         self.canvas.mpl_disconnect(self.scrollhandler)
         self.canvas.mpl_disconnect(self.presshandler)
-        self.root.quit()
+        # self.root.quit()
     
     def get_data(self):
         """Returns the data

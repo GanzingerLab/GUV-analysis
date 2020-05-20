@@ -4,9 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-sns.set("paper","white")
 
 def run():
+    sns.set("paper","white")
     files = askopenfilenames(initialdir=".", title="Select files to plot...",
                                               filetypes=(("csv files", "*.csv"), ("All files", "*.*")))
 

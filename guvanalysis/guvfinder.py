@@ -85,14 +85,14 @@ class helpers:
 
     @staticmethod
     def filter_GUV_dataframe(dataframe, params):
-        df = dataframe[dataframe['ar'] <= params.max_aspect_ratio]
-        df = df[df['r'] >= params.min_radius]
+        df = dataframe[dataframe['ar'] <= params.guv_max_aspect_ratio]
+        df = df[df['r'] >= params.guv_min_radius]
         return df
 
 
 class GUV_finder:
 
-    def __init__(self, stack: ImageSequenceND, parameters: ParameterList):
+    def __init__(self, stack: ImageSequenceND, parameters: ParameterList, canvas, figure):
         self.stack = stack
         self.stack.bundle_axes = 'yx' # have only yx data in one frame
         self.stack.iter_axes = 'z' # iterate over the z axis
@@ -105,13 +105,22 @@ class GUV_finder:
 
         self.params = parameters
 
+        self.guv_data = pd.DataFrame(columns=['x','y','frame','r','intensity','r_um']) # dummy data frame
+
+        self.canvas = canvas
+        self.figure = figure
+
+        # return self.get_data()
+        # if not self.guv_data.empty:
+        #     self.plot_distributions()
+        #     self.annotate_frames()
+
+    def run_analysis(self):
         self.find_GUVs_in_all_frames()
         self.link_GUV_points()
         self.get_GUVs_from_linked_points()
         self.determine_GUV_intensities()
-        if not self.guv_data.empty:
-            self.plot_distributions()
-            self.annotate_frames()
+        self.make_plots()
 
     def find_GUVs_in_all_frames(self):
         self.frames_filled = []
@@ -153,9 +162,9 @@ class GUV_finder:
                 xydistances[i,j] = xydist
                 zdistances[i,j] = zdist
 
-        zmask = zdistances<=2.
+        zmask = zdistances<=self.params.track_z_thresh
         samemask = zdistances != 0.
-        xymask = xydistances<=self.params.min_radius
+        xymask = xydistances<=self.params.track_xy_thresh
         valid_neighbours = zmask & samemask & xymask
         pairs = np.transpose((valid_neighbours).nonzero()) # create list of pairs of indices that are neighbours
         # outputs [(1,2),(2,3),(4,5),...] for all points that are classified as neighbours on the above criterea
@@ -203,7 +212,7 @@ class GUV_finder:
 
     def get_GUVs_from_linked_points(self):
         self.frames_regions['num_points'] = self.frames_regions.groupby(['guv_id'])['guv_id'].transform(len) # number of points corresponding to a certain GUV
-        self.frames_regions = self.frames_regions[(self.frames_regions['num_points'] > 2) & (self.frames_regions['guv_id'] != -1)].copy()
+        self.frames_regions = self.frames_regions[(self.frames_regions['num_points'] >= self.params.track_min_length) & (self.frames_regions['guv_id'] != -1)].copy()
         self.guv_data = self.frames_regions.sort_values('area', ascending=False).drop_duplicates(['guv_id']) # sort by area and use only the one with largest area
 
     def determine_GUV_intensities(self):
@@ -217,44 +226,29 @@ class GUV_finder:
         # set channel back
         self.stack.default_coords['c'] = self.params.channel
 
-    def plot_distributions(self):
+    def make_plots(self):
+        self.figure.clear()
+        self.axs = self.figure.subplots(3,1)
         self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']
 
-        fig,ax = plt.subplots(1,3,figsize=(12,3))
-        # print("Found %d GUVs with an average radius of %.02f ± %.02f µm" % )
-        ax[0].hist(self.guv_data['r_um'])
-        ax[0].set_title(r"$\langle r \rangle$ = %.02f ± %.02f µm [ch. #%d]" % (self.guv_data['r_um'].mean(), self.guv_data['r_um'].std(), self.params.channel))
-        ax[0].set_xlabel(r"radius (µm)")
-        ax[0].set_xlim(2.5,10.)
-        # plt.savefig("histogram_radii_ch%d.png" % channel, bbox_inches='tight')
+        self.axs[0].scatter(self.guv_data['x'], self.guv_data['y'])
+        self.axs[0].set_title("GUV positions in (x,y) plane")
+        self.axs[0].set_aspect(1)
+        self.axs[0].set_xlim(0,self.stack.sizes['x'])
+        self.axs[0].set_ylim(0,self.stack.sizes['y'])
 
-        ax[1].hist(self.guv_data['intensity'])
-        ax[1].set_title(r"$\langle I/I^{max}_{sphere} \rangle$ = %.02f ± %.02f µm" % (self.guv_data['intensity'].mean(), self.guv_data['intensity'].std()))
-        ax[1].set_xlabel(r"$I/I^{max}_{sphere}$")
-        # ax[1].set_xlim(0.,1.)
-        
-        ax[2].scatter(self.guv_data['intensity'],self.guv_data['r_um'])
-        ax[2].set_title(r"Intensity vs radius")
-        ax[2].set_xlabel(r"$I/I^{max}_{sphere}$")
-        ax[2].set_ylabel(r"radius (µm)")
+        self.axs[1].hist(self.guv_data['r_um'])
+        self.axs[1].set_xlabel(r"radius (µm)")
+        self.axs[1].set_title("Distribution of radii")
 
-        fig.suptitle(r"Distributions $(N = %d)$" % self.guv_data.shape[0])
+        self.axs[2].scatter(self.guv_data['r_um'], self.guv_data['intensity'])
+        self.axs[2].set_xlabel(r"radius (µm)")
+        self.axs[2].set_ylabel(r"$I/I^{max}_{sphere}$")
+        self.axs[2].set_title("Radius versus intensity")
 
-    def annotate_frames(self):
-        nonempty_frames = np.unique(self.guv_data['frame'])
-        fig,axs = plt.subplots(1,len(nonempty_frames), figsize=(5*len(nonempty_frames),5))
-        for i,f in enumerate(nonempty_frames):
-            guvs = self.guv_data[self.guv_data['frame'] == f]
-            axs[i].imshow(self.frames[f])
-            axs[i].set_title("%d GUVs at z=%d" % (len(guvs), f))
-            axs[i].axis('off')
-            for _,guv in guvs.iterrows():
-                axs[i].add_artist(Circle(xy=(guv['x'],guv['y']),radius=guv['r'],ec='yellow',facecolor='yellow',alpha=.45))
-        fig.suptitle("GUVs per frame")
-        plt.tight_layout(pad=0.1)
+        self.figure.tight_layout(w_pad=1,h_pad=1.3)
+
+        self.canvas.draw()
 
     def get_data(self):
         return self.guv_data
-
-    def display_plots(self):
-        plt.show()
