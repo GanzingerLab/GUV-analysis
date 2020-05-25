@@ -102,8 +102,8 @@ class GUV_Control:
         self.guv_data = self.guvfinder.get_data()
 
         self.scrolllabel = tk.Label(self.root, bg="white", height=3, text="""Use your scrollwheel to scroll through the stack
-        All GUVs are represented with blue circles, while the red circles indicate GUVs in the current frame
-        Right click near a red circle to remove it""")
+        All GUVs are represented with blue circles, while the yellow circles indicate GUVs in the current frame
+        Right click near a yellow circle to remove it""")
         self.scrolllabel.grid(column=4, row=0, ipady=2)
 
         self.scrollfig = Figure(figsize=(6,6), dpi=100)

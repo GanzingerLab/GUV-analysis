@@ -81,15 +81,15 @@ class GUI:
         self.widgets['lblHelp'].grid(column=0, row=0)
         self.widgets['lblIntChHelp'] = tk.Label(self.window, text='Channel for intensity')
         self.widgets['lblIntChHelp'].grid(column=0, row=1)
-        self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, exportselection=0)
-        self.widgets['lbIntChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, exportselection=0)
+        self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, height = self.stack.sizes['c'], exportselection=0)
+        self.widgets['lbIntChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, height = self.stack.sizes['c'], exportselection=0)
         for i,channel in enumerate(self.stack[0].metadata['channels']):
             self.widgets['lbChannel'].insert(i,channel)
             self.widgets['lbIntChannel'].insert(i,channel)
         self.widgets['lbChannel'].selection_set(first=(self.stack.sizes['c'] - 1))
         self.widgets['lbIntChannel'].selection_set(first=0)
-        self.widgets['lbChannel'].grid(column=1, row=0)
-        self.widgets['lbIntChannel'].grid(column=1, row=1)
+        self.widgets['lbChannel'].grid(column=1, row=0, ipady=5)
+        self.widgets['lbIntChannel'].grid(column=1, row=1,ipady=5)
         if self.has_multiple_series:
             self.widgets['btnNext'] = tk.Button(self.window, text="Select series >", command=self.extract_channelindex)
         else: 
