@@ -21,7 +21,7 @@ import os
 class GUV_GUI:
     """Graphical User Interface for selecting GUVs from the microscopy data"""
 
-    def __init__(self, stack: ImageSequenceND, guv_data: DataFrame, canvas: FigureCanvasTkAgg, figure: Figure):
+    def __init__(self, stack: ImageSequenceND, guv_data: DataFrame, canvas: FigureCanvasTkAgg, figure: Figure, updateddata_callback = None):
         """Initialize the GUI
         
         Keyword Arguments:
@@ -38,17 +38,21 @@ class GUV_GUI:
         self.canvas = canvas
         self.fig = figure
 
+        self.updateddata_callback = updateddata_callback # function to call if data is updated by user
+        
+        self.current_frame = 0
+
         self.open_GUV_selector() # launch the GUI
 
     def renew(self, guv_data):
         self.guv_data = guv_data
         self.open_GUV_selector()
+        self.draw_points_on_frame()
 
 
     def open_GUV_selector(self):
         """Creates interface with a plot to scroll through the stack
         """
-        self.current_frame = 0
         # self.fig = figure
         # plt.figure will block the tkinter mainloop and prevent the program from exiting: https://stackoverflow.com/a/17535868
         self.make_current_frame_points_array()
@@ -58,14 +62,10 @@ class GUV_GUI:
         self.imax = self.ax.imshow(self.stack[self.current_frame])
         self.ax.set_title(f'frame {self.current_frame}/{len(self.stack)-1}  ({len(self.guv_points)} GUVs)')
         
-        if self.guv_data.empty:
-            xs,ys = [],[]
-        else:
-            xs,ys = zip(*np.array(self.guv_data[['x','y']]))
-        self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
         plt.tight_layout()
 
         self.scrollhandler = self.canvas.mpl_connect('scroll_event', self._onscroll_guvselector) # scroll to zoom through frames
+        self.scrollhandler = self.canvas.mpl_connect('key_press_event', self._onscroll_guvselector) # key up/down to zoom through frames
         self.presshandler = self.canvas.mpl_connect('button_press_event', self._onclick_guvselector) # click to remove points 
         
         # self.root.mainloop()
@@ -92,14 +92,12 @@ class GUV_GUI:
         """Draws artists (selected points) for the current frame
         """
         self.remove_all_points()
-        if self.guv_data.empty:
-            xs,ys = [],[]
-        else:
-            xs,ys = zip(*np.array(self.guv_data[['x','y']]))
-        self.scax.remove()        
-        self.scax = self.ax.scatter(xs,ys, s=2,c='lime',alpha=.6)
-        for point in self.guv_points:
-            self.ax.add_artist(matplotlib.patches.Circle(xy=point[0:2],radius=point[2],ec='yellow',facecolor='yellow',alpha=.45))
+        
+        for _,point in self.guv_data.iterrows():
+            c,a = ('yellow', .45) if point['frame'] == self.current_frame else ('blue', .25)
+            # red if in current frame, blue if in other frame, also adjust transparency for clarity
+            self.ax.add_artist(matplotlib.patches.Circle(xy=(point['x'],point['y']),radius=point['r'],ec=c,facecolor=c,alpha=a))
+        
         self.canvas.draw()
 
     def find_closest_point_in_current_frame(self, point):
@@ -136,6 +134,8 @@ class GUV_GUI:
             if idx_to_remove >= 0:                     
                 self.guv_data = self.guv_data.drop(idx_to_remove)
                 self.make_current_frame_points_array()
+                if self.updateddata_callback is not None:
+                    self.updateddata_callback()
         
         self.draw_points_on_frame()
 
@@ -147,11 +147,11 @@ class GUV_GUI:
         Args:
             event (matplotlib.backend_bases.MouseEvent): Scroll event
         """
-        if event.button == 'up': # scrolling up => increase current frame
+        if event.button == 'up' or event.key == 'up': # scrolling up => increase current frame
             self.current_frame = (self.current_frame +
                                   1) % len(self.stack)
         
-        elif event.button == 'down': # scrolling down => decrease current frame
+        elif event.button == 'down' or event.key == 'down': # scrolling down => decrease current frame
             self.current_frame = (self.current_frame -
                                   1) % len(self.stack)
         

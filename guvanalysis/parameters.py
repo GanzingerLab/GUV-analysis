@@ -5,6 +5,9 @@ import json
 class ParameterList:
     """Class to hold, load and save parameters used in the GUV tracking"""
 
+    filename: str = "file.nd2" 
+    """Name and absolute path of the .nd2 file"""
+
     channel: int = 2 
     """The channel that is used for determination of the positions"""
 
@@ -52,7 +55,7 @@ class ParameterList:
         """Write the current parameters to a .json file"""
 
         with open(filename,"w") as jsonfile:
-            json.dump(asdict(self), jsonfile)
+            json.dump(asdict(self), jsonfile, indent=4)
 
     @staticmethod
     def from_json(filename):

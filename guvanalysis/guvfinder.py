@@ -110,11 +110,6 @@ class GUV_finder:
         self.canvas = canvas
         self.figure = figure
 
-        # return self.get_data()
-        # if not self.guv_data.empty:
-        #     self.plot_distributions()
-        #     self.annotate_frames()
-
     def run_analysis(self):
         self.find_GUVs_in_all_frames()
         self.link_GUV_points()
@@ -235,7 +230,7 @@ class GUV_finder:
         self.axs[0].set_title("GUV positions in (x,y) plane")
         self.axs[0].set_aspect(1)
         self.axs[0].set_xlim(0,self.stack.sizes['x'])
-        self.axs[0].set_ylim(0,self.stack.sizes['y'])
+        self.axs[0].set_ylim(self.stack.sizes['y'], 0) # images have their origin at top left
 
         self.axs[1].hist(self.guv_data['r_um'])
         self.axs[1].set_xlabel(r"radius (µm)")
@@ -250,5 +245,9 @@ class GUV_finder:
 
         self.canvas.draw()
 
+    def renew(self, guv_data):
+        self.guv_data = guv_data
+        self.make_plots()
+    
     def get_data(self):
         return self.guv_data

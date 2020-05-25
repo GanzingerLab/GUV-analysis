@@ -26,4 +26,5 @@ test-*.ipynb
 *.dat
 *.nd2
 *.csv
+*.json
 test*

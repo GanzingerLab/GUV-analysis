@@ -154,13 +154,13 @@ class GUI:
         for i in self.parameters['selected_series']:
             print(f"Analysing series {i}")
             self.stack.bundle_axes = 'yx'
-            finderparams = ParameterList(channel=self.parameters['channel'],
+            finderparams = ParameterList(filename=self.parameters['filename'],
+                                         channel=self.parameters['channel'],
                                          intensity_channel=self.parameters['intensity_channel'])
             if self.has_multiple_series:
                 self.stack.default_coords['v'] = i
                 finderparams.series = i
-            csvfilename = self.parameters['filename'].replace(".nd2","_GUVdata-s%02d.csv" % i)
-            gui = GUV_Control(self.stack, finderparams, csvfilename)
+            gui = GUV_Control(self.stack, finderparams)
             
         self.quit()
 
