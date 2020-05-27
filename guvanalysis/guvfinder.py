@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt # for plotting
 from matplotlib.patches import Circle
 # mpl.rcParams['figure.dpi'] = 150
 plt.rcParams['image.cmap'] = 'gray'
+import seaborn as sns
 
 import numpy as np
 import pandas as pd
@@ -17,22 +18,19 @@ from .parameters import ParameterList
 from skimage.filters import gaussian
 from skimage.measure import label,regionprops,regionprops_table
 from skimage.feature import canny
+from skimage.util import img_as_ubyte,img_as_uint
 from scipy import ndimage as ndi
 
 class helpers:
     @staticmethod
     @pims.pipeline
-    def as_8bit(frame):
+    def as_8bit(frame): # scale intensities to 8bit image
         imin = frame.min()
         imax = frame.max()
         a = (255 - 0) / (imax - imin)
         b = 255 - a * imax
         return (a * frame + b).astype(np.uint8)
-
-    @staticmethod
-    @pims.pipeline
-    def gaussian_5px(frame):
-        return gaussian(frame, 5)
+        # return img_as_uint(np.array(frame,dtype=np.uint16))
 
     @staticmethod
     def bounded_range(orig_range, min_val, max_val): # remove all items from a range that are outside (min,max)
@@ -44,8 +42,8 @@ class helpers:
 
     @staticmethod
     @pims.pipeline
-    def process_find_edges(frame):
-        return ndi.binary_fill_holes(canny(frame, sigma=1, low_threshold=20, high_threshold=50))
+    def process_find_edges(frame, params):
+        return ndi.binary_fill_holes(canny(frame, sigma=params.blur_radius, low_threshold=20, high_threshold=50))
 
     @staticmethod
     def image_subregion(frame, xlims=[0,100], ylims=[0,100], circular=False):
@@ -122,7 +120,7 @@ class GUV_finder:
         dfcols = ('frame', 'x', 'y', 'r', 'area', 'ar')
         self.frames_regions = pd.DataFrame(columns=dfcols)
         for i,frame in enumerate(self.frames):
-            self.frames_filled.append(helpers.process_find_edges(frame))
+            self.frames_filled.append(helpers.process_find_edges(frame, self.params))
             frame_regions = regionprops_table(label(self.frames_filled[i]), properties = ('centroid', 'major_axis_length', 'minor_axis_length', 'area'))
             if frame_regions:
                 # rename columns and delete old ones
@@ -222,26 +220,27 @@ class GUV_finder:
         self.stack.default_coords['c'] = self.params.channel
 
     def make_plots(self):
-        self.figure.clear()
-        self.axs = self.figure.subplots(3,1)
-        self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']
+        with sns.axes_style('white'):
+            self.figure.clear()
+            self.axs = self.figure.subplots(3,1)
+            self.guv_data['r_um'] = self.guv_data['r']*self.metadata['pixel_microns']
 
-        self.axs[0].scatter(self.guv_data['x'], self.guv_data['y'])
-        self.axs[0].set_title("GUV positions in (x,y) plane")
-        self.axs[0].set_aspect(1)
-        self.axs[0].set_xlim(0,self.stack.sizes['x'])
-        self.axs[0].set_ylim(self.stack.sizes['y'], 0) # images have their origin at top left
+            self.axs[0].scatter(self.guv_data['x'], self.guv_data['y'])
+            self.axs[0].set_title("GUV positions in (x,y) plane")
+            self.axs[0].set_aspect(1)
+            self.axs[0].set_xlim(0,self.stack.sizes['x'])
+            self.axs[0].set_ylim(self.stack.sizes['y'], 0) # images have their origin at top left
 
-        self.axs[1].hist(self.guv_data['r_um'])
-        self.axs[1].set_xlabel(r"radius (µm)")
-        self.axs[1].set_title("Distribution of radii")
+            self.axs[1].hist(self.guv_data['r_um'])
+            self.axs[1].set_xlabel(r"radius (µm)")
+            self.axs[1].set_title("Distribution of radii")
 
-        self.axs[2].scatter(self.guv_data['r_um'], self.guv_data['intensity'])
-        self.axs[2].set_xlabel(r"radius (µm)")
-        self.axs[2].set_ylabel(r"$I/I^{max}_{sphere}$")
-        self.axs[2].set_title("Radius versus intensity")
+            self.axs[2].scatter(self.guv_data['r_um'], self.guv_data['intensity'])
+            self.axs[2].set_xlabel(r"radius (µm)")
+            self.axs[2].set_ylabel(r"$I/I^{max}_{sphere}$")
+            self.axs[2].set_title("Radius versus intensity")
 
-        self.figure.tight_layout(w_pad=1,h_pad=1.3)
+            self.figure.tight_layout(w_pad=1,h_pad=1.3)
 
         self.canvas.draw()
 

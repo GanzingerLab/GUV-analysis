@@ -1,6 +1,6 @@
 scipy==1.4.1
 nd2reader==3.2.3
-scikit-image==0.16.2
+scikit-image==0.17.2
 pandas==1.0.3
 matplotlib==3.2.1
 numpy==1.18.2
