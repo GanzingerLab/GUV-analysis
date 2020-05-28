@@ -1,6 +1,6 @@
 import tkinter as tk
 import tkinter.ttk as ttk
-from tkinter.messagebox import askyesno
+from tkinter.messagebox import askyesno, showinfo
 import numpy as np
 import matplotlib.pyplot as plt
 plt.rcParams['image.cmap'] = 'gray'
@@ -11,11 +11,13 @@ import nd2reader
 import pims
 import pandas as pd
 from pandas import DataFrame
+from datetime import datetime
 import os
 from .parameters import ParameterList
 from .guvgui import GUV_GUI
 from .guvfinder import GUV_finder
 from .tkhelpers import CreateToolTip
+
 
 class GUV_Control:
     """Graphical User Interface for altering finding parameters and selecting GUVs
@@ -33,14 +35,11 @@ class GUV_Control:
         self.adjustable_params = self.params.get_adjustable_variables()
 
         filepath_without_ext = self.params.filename.replace(".nd2","")
-        if self.params.series is None:
-            self.resultsfilename = filepath_without_ext + "_GUVdata.csv"
-            self.paramsfilename = filepath_without_ext + "_GUVparams.json"
-        else:
-            self.resultsfilename = filepath_without_ext + "_s%02d-GUVdata.csv" % self.params.series
-            self.paramsfilename = filepath_without_ext + "_s%02d-GUVparams.json" % self.params.series
+        date_suffix = datetime.now().strftime("%y%m%d%H%M")
+        self.resultsfilename = f"{filepath_without_ext}_{'s%02d-' % self.params.series if self.params.series is not None else ''}GUVdata_{date_suffix}.csv"
+        self.paramsfilename = f"{filepath_without_ext}_{'s%02d-' % self.params.series if self.params.series is not None else ''}GUVparams_{date_suffix}.json"
 
-        self.removed_GUVs = False # for determining whehter user has changed data using scroller
+        self.removed_GUVs = False # for determining whether user has changed data using scroller
 
         self.initiate_GUI() # launch the GUI
 
@@ -67,7 +66,10 @@ class GUV_Control:
 
         num_cols = 2
         analysis_button = tk.Button(self.root, text='Run analysis >', command=self.run_analysis)
-        analysis_button.grid(row=num_rows, column=0, columnspan=num_cols)
+        analysis_button.grid(row=num_rows, column=0, columnspan=num_cols-1)
+        
+        help_button = tk.Button(self.root, text='Help', command=self.show_help)
+        help_button.grid(row=num_rows, column=num_cols-1)
         num_rows += 1
 
         ttk.Separator(self.root, orient=tk.HORIZONTAL).grid(column=0, row=num_rows, columnspan=num_cols, sticky='ew', pady=10)
@@ -157,6 +159,16 @@ class GUV_Control:
         self.statusbar['text'] = 'GUV was removed successfully and statistics were updated'
         self.guvfinder.renew(self.guv_data)
         self.fill_results_labels()
+
+    def show_help(self):
+        help_msgs = ("Problem: Many overlapping circles with more or less the same centre, belonging to the same GUV\nSolution: Increase the value of `track_z_thresh`, such that when a GUV is not detected in a few frames, it will still be linked to the track instead of shown as a separate GUV",
+                    "Problem: Small GUVs not found\nSolution: Increase `guv_min_radius`",
+                    "Problem: GUVs that are close are not resolved\nSolution: Decrease the value of `track_xy_tresh` such that GUVs are more easily tracked as separate ones instead of being merged into the same track",
+                    "Problem: GUV sizes overestimated\nSolution: Increase the value of `blur_radius`, such that the blurring will affect the effective ratio less"
+        )
+
+        showinfo(title='Parameters help', message="\n\n".join(help_msgs), master=self.root)
+
 
     def finish(self):
         self.guv_data = self.scroller.get_data()

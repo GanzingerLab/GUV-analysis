@@ -23,13 +23,13 @@ class ParameterList:
     guv_max_aspect_ratio: float = 1.3
     """Maximum aspect ratio for GUVs that is considered"""
 
-    guv_min_radius: float = 7.
+    guv_min_radius: float = 5.
     """Minimal radius (in px) that a GUV should have to be included"""
     
     track_xy_thresh: float = 7.
     """Maximal distance in xy plane (in px) for which two GUVs are considered to belong to the same track"""
     
-    track_z_thresh: int = 2
+    track_z_thresh: int = 3
     """Maximal distance in z plane (in frames) for which two GUVs are considered to belong to the same track"""
 
     track_min_length: int = 3
