@@ -3,7 +3,9 @@ import tkinter.filedialog as filedialog
 from tkinter import ttk
 from .guvcontrol import GUV_Control
 from .parameters import ParameterList
+from .tkhelpers import PhotoImage_cd
 from PIL import Image, ImageTk
+import pandas as pd
 import matplotlib.pyplot as plt
 import pims 
 import os
@@ -22,10 +24,82 @@ class GUI:
         self.root.iconbitmap(os.path.join(os.path.dirname(__file__), "icon.ico"))
         self.window = tk.Frame(self.root)
         self.window.pack(side="top", fill="both", expand=True)
-        self.widgets = {'lblHelp': tk.Label(self.window, text="Select a file to open")}
+
+        self.widgets = {}
+        self.images = {}
+
+        self.widgets['lblTitle'] = tk.Label(self.window, text='GUV analysis tool', font="-weight bold -size 20")
+        self.widgets['lblTitle'].grid(column=0, row=0, columnspan=3)
+
+        self.images['newImg'] = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__),'icon-new.png')).subsample(2,2)
+        self.widgets['btnNew'] = tk.Button(self.window, text='New analysis', image=self.images['newImg'], command=self.start_new_analysis, compound=tk.TOP, borderwidth=0)
+        self.widgets['btnNew'].grid(column=0, row=1, padx=10)
+
+        self.images['openImg'] = PhotoImage_cd('icon-open.png').subsample(2,2)
+        self.widgets['btnOpen'] = tk.Button(self.window, text='Open existing analysis', command=self.reopen_existing_analysis, image=self.images['openImg'], compound=tk.TOP, borderwidth=0)
+        self.widgets['btnOpen'].grid(column=1, row=1, padx=10)
+
+        self.images['closeImg'] = PhotoImage_cd('icon-close.png').subsample(2,2)
+        self.widgets['btnClose'] = tk.Button(self.window, text='Close program', command=self.root.quit, image=self.images['closeImg'], compound=tk.TOP, borderwidth=0)
+        self.widgets['btnClose'].grid(column=2, row=1, padx=10)
+        
+    def start_new_analysis(self):
+        self.destroy_all()
+        self.widgets['lblHelp'] = tk.Label(self.window, text="Select an nd2 file to open")
         self.widgets['lblHelp'].pack(side='top')
         self.parameters = {}
         self.open_nd2()
+
+    def reopen_existing_analysis(self):
+        self.destroy_all()
+        self.widgets['lblHelp'] = tk.Label(self.window, text="Select a parameters file to open")
+        self.widgets['lblHelp'].pack(side='top')
+        self.parameters = {}
+        filename = False
+
+        while not filename:
+            filename = filedialog.askopenfilename(initialdir=".", title="Select parameters file...",
+                                              filetypes=(("Parameters file", "*.json"), ("All files", "*.*")))
+        params = ParameterList.from_json(filename)
+        self.parameters['filename'] = False
+
+        if os.path.exists(params.filename): # check whether the nd2 filename in the json file exists
+            self.parameters['filename'] = params.filename
+
+        while not self.parameters['filename']: # if the file does not exists, prompt the user to open the correct file
+            print(f"{params.filename} does not exist, pick nd2 file to use")
+            self.parameters['filename'] = filedialog.askopenfilename(initialdir=os.path.dirname(filename), title="Select nd2 file...",
+                                            filetypes=(("nd2 files", "*.nd2"), ("All files", "*.*")))
+            
+        datafilename = filename.replace(".json",".csv").replace("GUVparams","GUVdata")
+        if not os.path.exists(datafilename):
+            datafilename = False
+        
+        data = pd.read_csv(datafilename, header=0, sep=",")
+        if data.empty:
+            print("Given datafile is empty, please select another one")
+            datafilename = False
+
+        while not datafilename:
+            datafilename = filedialog.askopenfilename(initialdir=os.path.dirname(filename), title="Select data file...",
+                                            filetypes=(("csv files", "*.csv"), ("All files", "*.*")))
+            data = pd.read_csv(datafilename, header=0, sep=",")
+            if data.empty:
+                print("Given datafile is empty, please select another one")
+                datafilename = False
+            
+        self.stack = pims.open(self.parameters['filename'])
+        self.stack.bundle_axes = 'yx'
+        self.stack.iter_axes = 'z'
+        self.stack.default_coords['c'] = params.channel
+        self.stack.default_coords['t'] = 0
+        if params.series:
+            self.stack.default_coords['v'] = params.series
+        
+        GUV_Control(self.stack, params, data)
+        print("Selected the following files:",filename, self.parameters['filename'], datafilename)
+        self.root.quit()
+
 
     def destroy_all(self):
         """Clear all frames and widgets"""
@@ -160,13 +234,13 @@ class GUI:
             if self.has_multiple_series:
                 self.stack.default_coords['v'] = i
                 finderparams.series = i
-            gui = GUV_Control(self.stack, finderparams)
+            GUV_Control(self.stack, finderparams) # launch the GUI that can find GUVs and let the user remove them
             
         self.quit()
 
     def mainloop(self):
         """Main loop to display the program"""
-        self.window.mainloop()
+        self.root.mainloop()
     
     def quit(self):
         """Exits the program"""
