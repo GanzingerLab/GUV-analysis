@@ -25,7 +25,7 @@ class GUV_Control:
     Uses the GUV_GUI and GUV_finder
     """
 
-    def __init__(self, stack: ImageSequenceND, parameters: ParameterList):
+    def __init__(self, stack: ImageSequenceND, parameters: ParameterList, data: pd.DataFrame = None):
         """Initialize the GUI
         """
         self.stack = stack
@@ -40,6 +40,8 @@ class GUV_Control:
         self.paramsfilename = f"{filepath_without_ext}_{'s%02d-' % self.params.series if self.params.series is not None else ''}GUVparams_{date_suffix}.json"
 
         self.removed_GUVs = False # for determining whether user has changed data using scroller
+
+        self.guv_data = data  
 
         self.initiate_GUI() # launch the GUI
 
@@ -108,7 +110,11 @@ class GUV_Control:
         self.statscanvas.get_tk_widget().grid(column=num_cols, row=1, rowspan=num_rows-1, sticky='nswe')
 
         self.guvfinder = GUV_finder(self.stack, self.params, self.statscanvas, self.statsfig)
-        self.guv_data = self.guvfinder.get_data()
+        if self.guv_data is not None:
+            self.guvfinder.renew(self.guv_data)
+            self.fill_results_labels()
+        else:
+            self.guv_data = self.guvfinder.get_data()
         num_cols += 1
 
         self.scrolllabel = tk.Label(self.root, bg="white", height=3, text="""Use your scrollwheel to scroll through the stack
@@ -164,7 +170,7 @@ class GUV_Control:
         help_msgs = ("Problem: Many overlapping circles with more or less the same centre, belonging to the same GUV\nSolution: Increase the value of `track_z_thresh`, such that when a GUV is not detected in a few frames, it will still be linked to the track instead of shown as a separate GUV",
                     "Problem: Small GUVs not found\nSolution: Increase `guv_min_radius`",
                     "Problem: GUVs that are close are not resolved\nSolution: Decrease the value of `track_xy_tresh` such that GUVs are more easily tracked as separate ones instead of being merged into the same track",
-                    "Problem: GUV sizes overestimated\nSolution: Increase the value of `blur_radius`, such that the blurring will affect the effective ratio less"
+                    "Problem: GUV sizes overestimated\nSolution: Decrease the value of `blur_radius`, such that the blurring will affect the effective ratio less"
         )
 
         showinfo(title='Parameters help', message="\n\n".join(help_msgs), master=self.root)

@@ -1,4 +1,5 @@
 import tkinter as tk
+import os
 
 class ToolTip(object):
 
@@ -38,3 +39,12 @@ def CreateToolTip(widget, text):
         toolTip.hidetip()
     widget.bind('<Enter>', enter)
     widget.bind('<Leave>', leave)
+
+def PhotoImage_cd(filename):
+    """
+    Returns a PhotoImage based on solely the filename 
+    with the current file's directory as base 
+    instead of the directory from which the script is executed.
+    """
+
+    return tk.PhotoImage(file=os.path.join(os.path.dirname(__file__),filename))
