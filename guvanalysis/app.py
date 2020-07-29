@@ -115,17 +115,35 @@ class GUI:
         """Opens the filepicker for an nd2 file and proceeds to the next step"""
 
         filename = filedialog.askopenfilename(initialdir=".", title="Select file...",
-                                              filetypes=(("nd2 files", "*.nd2"), ("All files", "*.*")))
+                                              filetypes=(("nd2 files", "*.nd2"), ("tif files", "*.tif"), ("All files", "*.*")))
         if filename:
-            self.parameters['filename'] = filename
+            self.parameters['basename'] = os.path.basename(filename)
             self.parameters['directory'] = os.path.dirname(filename)
+            if filename[-4:] == ".tif":
+                print("Tif file selected")
+                self.parameters['filename'] = os.path.join(self.parameters['directory'],"*.tif")
+                self.parameters['filetype'] = "tif"
+
+                # get pixel size
+                im = Image.open(filename)
+                self.parameters['pixel_microns'] = 1./im.info['resolution'][0] # saved in tiff info by imagej
+                im.close()
+            else: # selected nd2 file
+                self.parameters['filename'] = filename
+                self.parameters['filetype'] = "nd2"
             self.widgets['lblHelp']['text'] = f"You selected {filename}"
             self.process_nd2()
 
     def process_nd2(self):
         """Loads the nd2 file into the class and obtains and displays the metadata from the file"""
-
-        self.stack = pims.open(self.parameters['filename'])
+        if self.parameters['filetype'] == 'tif':
+            self.stack = pims.ImageSequenceND(self.parameters['filename'], axes_identifiers=['c','z'])
+            self.parameters['channels'] = [f"channel {i}" for i in range(self.stack.sizes['c'])]
+        else:
+            self.stack = pims.open(self.parameters['filename'])
+            self.stack.default_coords['t'] = 0
+            self.parameters['channels'] = self.stack[0].metadata['channels']
+            self.parameters['pixel_microns'] = self.stack[0].metadata['pixel_microns']
         if "v" in self.stack.sizes:
             self.stack.bundle_axes = 'vyx'
             self.has_multiple_series = True
@@ -133,7 +151,6 @@ class GUI:
             self.stack.bundle_axes = 'yx'
             self.has_multiple_series = False
         self.stack.iter_axes = 'z'
-        self.stack.default_coords['t'] = 0
         tvMeta = ttk.Treeview(self.window)
         tvMeta['columns'] = ("metaval")
         tvMeta.column("#0", width=250)
@@ -157,7 +174,7 @@ class GUI:
         self.widgets['lblIntChHelp'].grid(column=0, row=1)
         self.widgets['lbChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, height = self.stack.sizes['c'], exportselection=0)
         self.widgets['lbIntChannel'] = tk.Listbox(self.window, selectmode=tk.SINGLE, width=50, height = self.stack.sizes['c'], exportselection=0)
-        for i,channel in enumerate(self.stack[0].metadata['channels']):
+        for i,channel in enumerate(self.parameters['channels']):
             self.widgets['lbChannel'].insert(i,channel)
             self.widgets['lbIntChannel'].insert(i,channel)
         self.widgets['lbChannel'].selection_set(first=(self.stack.sizes['c'] - 1))
@@ -230,7 +247,8 @@ class GUI:
             self.stack.bundle_axes = 'yx'
             finderparams = ParameterList(filename=self.parameters['filename'],
                                          channel=self.parameters['channel'],
-                                         intensity_channel=self.parameters['intensity_channel'])
+                                         intensity_channel=self.parameters['intensity_channel'],
+                                         pixel_microns=self.parameters['pixel_microns'])
             if self.has_multiple_series:
                 self.stack.default_coords['v'] = i
                 finderparams.series = i

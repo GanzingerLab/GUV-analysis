@@ -14,6 +14,9 @@ class ParameterList:
     series: int = None
     """Index of the series that should be analyzed (None for file without series)"""
 
+    pixel_microns: float = None
+    """Pixel size of the stack"""
+
     blur_radius: float = 1.
     """Blurring radius for the Gaussian blur that is used in the edge detection"""
 

@@ -29,12 +29,13 @@ class GUV_Control:
         """Initialize the GUI
         """
         self.stack = stack
-        self.stack.bundle_axes = "yx"
-        self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
+        # self.stack.bundle_axes = "yx"
+        # self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
         self.params = parameters
         self.adjustable_params = self.params.get_adjustable_variables()
 
         filepath_without_ext = self.params.filename.replace(".nd2","")
+        filepath_without_ext = self.params.filename.replace("*.tif","")
         date_suffix = datetime.now().strftime("%y%m%d%H%M")
         self.resultsfilename = f"{filepath_without_ext}_{'s%02d-' % self.params.series if self.params.series is not None else ''}GUVdata_{date_suffix}.csv"
         self.paramsfilename = f"{filepath_without_ext}_{'s%02d-' % self.params.series if self.params.series is not None else ''}GUVparams_{date_suffix}.json"

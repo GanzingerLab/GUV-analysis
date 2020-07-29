@@ -92,13 +92,18 @@ class GUV_finder:
 
     def __init__(self, stack: ImageSequenceND, parameters: ParameterList, canvas, figure):
         self.stack = stack
-        self.stack.bundle_axes = 'yx' # have only yx data in one frame
-        self.stack.iter_axes = 'z' # iterate over the z axis
-        self.stack.default_coords['c'] = parameters.channel # select the correct channel
-        if parameters.series and 'v' in self.stack.sizes:
-            self.stack.default_coords['v'] = parameters.series # select the correct channel
-        self.stack.default_coords['t'] = 0 # single time
-        self.metadata = self.stack.metadata
+        # self.stack.bundle_axes = 'yx' # have only yx data in one frame
+        # self.stack.iter_axes = 'z' # iterate over the z axis
+        # self.stack.default_coords['c'] = parameters.channel # select the correct channel
+        # if parameters.series and 'v' in self.stack.sizes:
+        #     self.stack.default_coords['v'] = parameters.series # select the correct channel
+        # self.stack.default_coords['t'] = 0 # single time
+        # self.metadata = self.stack.metadata
+        if hasattr(self.stack, 'metadata'):
+            self.metadata = self.stack.metadata
+        else:
+            self.metadata = {'pixel_microns': parameters.pixel_microns}
+        print(self.metadata)
         self.frames = helpers.as_8bit(stack)
 
         self.params = parameters
@@ -205,6 +210,7 @@ class GUV_finder:
 
     def get_GUVs_from_linked_points(self):
         self.frames_regions['num_points'] = self.frames_regions.groupby(['guv_id'])['guv_id'].transform(len) # number of points corresponding to a certain GUV
+        self.frames_regions.to_csv("points_snapshot.csv", index=False, header=True)
         self.frames_regions = self.frames_regions[(self.frames_regions['num_points'] >= self.params.track_min_length) & (self.frames_regions['guv_id'] != -1)].copy()
         self.guv_data = self.frames_regions.sort_values('area', ascending=False).drop_duplicates(['guv_id']) # sort by area and use only the one with largest area
 

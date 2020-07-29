@@ -31,8 +31,8 @@ class GUV_GUI:
             figure {Figure}: The figure object used to plot
         """
         self.stack = stack
-        self.stack.bundle_axes = "yx"
-        self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
+        # self.stack.bundle_axes = "yx"
+        # self.stack.iter_axes = "z" # iterate over only z axis, channel should be set in app.py
         self.guv_data = guv_data
 
         self.canvas = canvas
