@@ -125,7 +125,7 @@ class GUI:
                 self.parameters['filetype'] = "tif"
 
                 # get pixel size
-                im = Image.open(filename)
+                im = Image.open(filename) # open file with Pillow to extract metadata from it
                 self.parameters['pixel_microns'] = 1./im.info['resolution'][0] # saved in tiff info by imagej
                 im.close()
             else: # selected nd2 file
